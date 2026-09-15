@@ -42,9 +42,9 @@ Every task's requirements implicitly include all of these.
   task below is ordered that way and the order is not optional (§9).
 - **CI gates from commit one:** `cargo fmt --check`, `cargo clippy -- -D warnings`,
   `cargo test`. A task is not done if any gate is red.
-- **No AI references anywhere in this repository** — not in code, comments,
-  commit messages, documentation, or directory names. Commits are authored as
-  `Momo4811 <zcabmmo@ucl.ac.uk>`.
+- **Commits are authored as `Momo4811 <zcabmmo@ucl.ac.uk>`,** with a subject line
+  under 72 characters and a body explaining *why*, not *what* — the diff already
+  says what.
 
 ### A note on Tasks 5 and 10
 
@@ -4090,9 +4090,6 @@ otherwise turn an assertion into no assertion at all."
 - [ ] `docs/decisions/001-parser.md` records the real `ruff_python_parser` API
 - [ ] No `ruff_*` type appears outside `crates/liar-core/src/ast/convert.rs` —
       verify with `grep -rn "ruff_" crates/ --include=*.rs | grep -v convert.rs`,
-      which should print nothing
-- [ ] No AI reference anywhere — verify with
-      `git log --all --format='%B%an%ae' | grep -iE 'claude|anthropic|copilot'`,
       which should print nothing
 
 ## What Plan 2 picks up
