@@ -53,6 +53,10 @@ cross-platform binary distribution work that reach would require is cut.
 2. A VS Code extension that runs it live, with the personality intact.
 3. A corpus run over real packages, with an honestly measured accuracy rate.
 4. A README a stranger understands in ninety seconds.
+5. A test suite thorough enough that the precision claim in (3) is credible
+   before anyone runs the tool — see §9. This is a goal in its own right, not a
+   means to the others: a reader who opens `tests/` should find the negative
+   cases outnumbering the positive ones, and understand why within a minute.
 
 ### Non-goals
 
@@ -418,32 +422,166 @@ Inline suppression via `# liar: ignore[C3e]`.
 
 ## 9. Testing
 
-**Fixtures.** `tests/fixtures/<check>/*.py`, each a small Python file with
-expected findings declared inline:
+The tool's entire value is that its findings can be trusted. A checker that is
+right 60% of the time is worse than no checker, because it teaches the reader to
+ignore it. The test suite is therefore not a safety net added at the end — it is
+what defines whether a checker is finished.
 
-```python
-def is_ready() -> str:   # expect: C3a
-    return "yes"
+**Method: test first, always.** No checker is written before its fixtures exist.
+Write the Python that should trigger it, write the Python that should *not*,
+watch them fail, then implement. Negative fixtures written after the
+implementation are negative fixtures that encode the implementation's blind
+spots instead of catching them.
+
+### 9.1 The half that matters most
+
+For a tool governed by *when unsure, stay silent* (§4), **the negative tests are
+the important half.** Tests asserting a bug is found measure recall. False
+positives are the only thing that can kill this tool, so most of every checker's
+fixtures assert that it correctly says *nothing*.
+
+Every suppression rule in §5 gets its own negative fixture, named after it:
+
+```
+tests/fixtures/C1/
+  positive/
+    discarded_call.py
+    assigned_never_awaited.py
+    method_call.py
+    cross_module.py
+  negative/
+    wrapped_in_create_task.py
+    wrapped_in_gather.py
+    passed_as_argument.py
+    returned_by_sync_fn.py
+    callee_unresolvable.py
+    already_awaited.py
 ```
 
-A harness parses the expectations and diffs against actual output. Adding a case
-is adding a file.
+**A suppression rule with no negative fixture does not count as implemented.**
 
-**Snapshots.** `insta` over rendered diagnostics in all three tones, so neither
-the formatting nor the voice can drift unnoticed.
+### 9.2 Fixture format
 
-**The corpus is the integration test.** Two assertions, enforced in CI:
+Each file declares its expectations inline, so the case and its assertion live
+together:
 
-1. **Zero panics on real code.** Non-negotiable. Real code finds every
-   assumption the fixtures let stand.
-2. **No unexplained jump in finding counts.** Per-check counts are committed to
-   `corpus/baseline.json`. CI fails if any check's count moves by more than 20%
-   without the baseline being updated in the same commit — which forces the
-   change to be looked at and explained in the commit message rather than
-   absorbed silently.
+```python
+# fixtures/C3a/positive/bool_name_returns_str.py
+def is_ready() -> str:   # expect: C3a
+    return "yes"
 
-**Determinism.** Same input, same output, same order. Findings are sorted by
-file, line, column, check id before rendering.
+def is_done() -> bool:   # no comment == must produce nothing
+    return True
+```
+
+The harness parses `# expect: <id>` comments, runs the analyser and diffs.
+**Unexpected findings fail as loudly as missing ones** — without that, negative
+cases quietly stop testing anything. Adding a case is adding a file.
+
+### 9.3 Component tests
+
+| Component | What is tested |
+|---|---|
+| Index | Resolution across files; aliased, relative and re-exported imports; shadowing; class vs module vs comprehension scope; and that `import *` and conditional imports yield `Unknown` rather than a guess |
+| Type inference | Each rule in isolation; the lattice laws below; recursion guard terminates on mutually recursive functions |
+| CFG | Every block reachable from entry; every block reaches an exit; exception edges on every call; `try`/`except`/`else`/`finally`/`with`/loop/`break`/`continue`/`return`/`raise` shapes pinned as golden Graphviz files |
+| Dataflow solver | Reaches a fixpoint; terminates; result independent of worklist order |
+| Rendering | Snapshot per check, per tone |
+
+**The lattice laws are property tests, not examples.** Via `proptest`, over
+arbitrary type pairs:
+
+```
+join(a, b)          == join(b, a)              commutative
+join(join(a, b), c) == join(a, join(b, c))     associative
+join(a, a)          == a                       idempotent
+join(a, Never)      == a                       bottom is identity
+join(a, Unknown)    == Unknown                 Unknown is absorbing
+```
+
+If any of these fails, the fixpoints in §7 and §8.4 may not converge, or may
+produce different answers depending on the order files happened to be visited.
+These are not stylistic properties — they are the preconditions for the analysis
+being well-defined at all, and they cost an afternoon to check exhaustively.
+
+### 9.4 Metamorphic tests
+
+Properties relating *pairs* of inputs, which catch classes of bug that example
+tests cannot:
+
+- Reformatting a file — blank lines, comments, line wrapping — changes no
+  finding except its span.
+- Renaming a local consistently throughout a function changes no finding except
+  the naming checks.
+- Reordering independent top-level definitions changes the findings' order but
+  not the set.
+- Analysing the same file twice in one process gives identical results, proving
+  no state leaks between runs.
+
+### 9.5 Integration
+
+- **CLI** — end to end over a fixture project: exit codes, `--format sarif`
+  validated against the published SARIF schema, config file handling, inline
+  `# liar: ignore[C3e]` suppression, ignore globs.
+- **LSP** — a protocol-level harness driving `liar-lsp` over stdio:
+  `initialize`, `didOpen`, `didChange`, `didSave`, diagnostics published with
+  correct ranges, the `await` quick-fix producing a valid edit, clean shutdown.
+  Driven without VS Code in the loop, so a failure is unambiguous about where it
+  came from.
+- **Extension** — the standard VS Code integration harness: activates, locates
+  the binary or reports its absence usefully, surfaces diagnostics.
+
+### 9.6 The corpus, and the false-positive ratchet
+
+The top ~100 PyPI packages (§10.1), scanned in CI. Three assertions:
+
+1. **Zero panics.** Non-negotiable. Real code finds every assumption the
+   fixtures let stand.
+2. **No unexplained count movement.** Per-check counts live in
+   `corpus/baseline.json`; CI fails if any moves by more than 20% without the
+   baseline being updated in the same commit, forcing the change to be explained
+   rather than absorbed.
+3. **Bounded runtime.** Scan time recorded per run; a regression above 25%
+   fails.
+
+**The ratchet:** every false positive found in triage (§10.2) is first minimised
+into a permanent negative fixture, and only then fixed. The suite grows
+monotonically with everything real code has ever taught it, and no false
+positive can come back. This is the most valuable practice in the project,
+because the false positives that matter are precisely the ones nobody would have
+thought to write a test for.
+
+### 9.7 Fuzzing and hostile input
+
+`cargo-fuzz` over the whole pipeline — arbitrary bytes in; parse, index, infer,
+check. The only assertion is that it never panics and always terminates. A short
+budget per push, a long budget nightly.
+
+Explicit fixtures for the input nobody plans for: syntactically invalid files,
+empty files, a file that is one 50,000-character line, deeply nested expressions
+that could blow a recursive descent stack, every encoding declaration Python
+permits, BOMs, mixed tabs and spaces, and CRLF.
+
+### 9.8 Determinism
+
+Same input, same output, byte for byte. Findings sorted by file, line, column,
+check id before rendering. Tested by analysing a project twice with file
+discovery order shuffled and diffing. Non-determinism here would quietly make
+the corpus baselines meaningless.
+
+### 9.9 Gates
+
+CI on every push **from week 1** — not added later. A pipeline introduced in
+week 6 is a pipeline that has never caught anything.
+
+- `cargo test` — every layer above
+- `cargo clippy -- -D warnings`
+- `cargo fmt --check`
+- Corpus scan with its three assertions
+- Line coverage on `liar-core` at 80% or above, via `cargo-llvm-cov`
+
+Coverage is a floor, not a target. Eighty percent with thorough negative
+fixtures is worth more than ninety-five reached by testing getters.
 
 ## 10. Evidence
 
@@ -490,15 +628,20 @@ early: review cycles run to weeks and roughly a third land.
 
 Eight weeks, ~12 hours a week.
 
+Every row below includes its tests; none of them is a separate "testing week."
+A checker is not done when it fires — it is done when its positive fixtures
+pass, every suppression rule in §5 has a negative fixture that also passes, and
+the corpus scan shows no new panics. Per §9, the fixtures are written first.
+
 | Wk | Work | Done when |
 |----|------|-----------|
-| 1 | Workspace, parser spike + decision, arenas and ids, diagnostic rendering, tone system, config, CLI skeleton | `liar check f.py` renders a finding in all three tones |
+| 1 | Workspace, parser spike + decision, arenas and ids, diagnostic rendering, tone system, config, CLI skeleton, **fixture harness and CI** | `liar check f.py` renders a finding in all three tones, and a deliberately failing fixture turns CI red |
 | 2 | Index: scopes, bindings, cross-file imports, call graph, `debug resolve` | Names resolve correctly across a real multi-file project |
 | 3 | C1 and C2 end to end; `liar-corpus`; first real-world scan | It finds genuine un-awaited calls in real packages |
 | 4 | `liar-lsp`, VS Code extension, `await` quick-fix, publish v0.1 | Findings appear live in the editor as you type |
-| 5 | Type inference: literals, constructors, returns, `isinstance`, interprocedural fixpoint | `is_ready() -> str` is caught |
+| 5 | Type inference: literals, constructors, returns, `isinstance`, interprocedural fixpoint; **lattice law property tests** | `is_ready() -> str` is caught, and the five laws in §9.3 hold under `proptest` |
 | 6 | C3a–C3f | All six pass fixtures; corpus false positives triaged |
-| 7 | CFG with exception edges, dataflow solver, C4, `debug cfg` | The `f.close()` example is caught; escapes suppressed |
+| 7 | CFG with exception edges, dataflow solver, C4, `debug cfg`; **golden CFG files for every statement shape** | The `f.close()` example is caught; escapes suppressed; CFG shapes pinned |
 | 8 | Triage and accuracy number, C5 if it fits, README, GIF, write-up | A stranger gets it in ninety seconds |
 
 Week 4 is deliberately the light one and deliberately early. Getting the
