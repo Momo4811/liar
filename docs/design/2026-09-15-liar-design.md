@@ -330,12 +330,37 @@ trivially serialisable for debugging.
 
 ### 8.1 Parsing
 
-**Decision to make on day one, by spike, not by argument.** Two candidates:
-`rustpython-parser` and `ruff_python_parser`. Spend one hour on each, parsing a
-real file and walking the tree, and choose on: fidelity of spans, whether the
-AST is genuinely an AST rather than a CST, coverage of modern syntax (match
-statements, f-string internals, `walrus`, PEP 695 generics), and API ergonomics.
-Record the choice and the reasoning in `docs/decisions/001-parser.md`.
+**Decided: `ruff_python_parser`.** The spike this section originally called for
+was made unnecessary by one fact from the registry:
+
+| Crate | Latest | Last published |
+|---|---|---|
+| `rustpython-parser` | 0.4.0 | **2024-08-06** |
+| `ruff_python_parser` | 0.0.13 | **2026-09-10** |
+
+A Python parser two years stale cannot parse current Python, and a linter that
+chokes on syntax its targets already use is worthless. `ruff_python_parser` is
+the parser `ruff` itself runs on, it is a hand-written recursive descent parser
+producing a genuine AST rather than a CST, and it is maintained continuously.
+
+**Accepted risk:** Astral publish these crates at `0.0.x` as an implementation
+detail of `ruff`, not as a stable public API. Documentation is thin and the API
+may churn between releases. Mitigated by pinning the exact version
+(`=0.0.13`), by never letting parser types cross out of `liar-core::ast`
+(§8.1.1), and by upgrading only deliberately.
+
+Record the decision and this reasoning in `docs/decisions/001-parser.md`.
+
+### 8.1.1 The AST facade
+
+Parser types are converted once, at the boundary, into `liar-core`'s own node
+types and never appear anywhere else in the codebase. Every later crate, every
+checker, and every test sees only `liar-core::ast`.
+
+This is not ceremony. The parser is a `0.0.x` dependency with an unstable API,
+and the facade is what makes that an acceptable risk rather than a structural
+one: an upgrade that breaks the API breaks one module, with a test suite that
+already defines correct behaviour.
 
 Tree-sitter is rejected. It is built for editors — resilient to broken input,
 producing a tree that mirrors source text. For analysis, a real AST is the
@@ -674,7 +699,7 @@ run, the README.
 |---|---|
 | Type inference overruns week 5 | Tier it: literals and annotations first, interprocedural fixpoint last and droppable. C3a/C3b/C3e work on the tier-one subset alone. |
 | C4 false positives on real code | The escape rule is the lever. If precision is still poor, restrict to resources acquired and released in the same function. |
-| Parser choice proves wrong in week 5 | The AST is wrapped behind `liar-core`'s own node types from week 1, so swapping parsers is one crate, not the project. |
+| `ruff_python_parser` is `0.0.x` and its API churns | Pin `=0.0.13`. The facade (§8.1.1) confines the blast radius to one module with tests that already define correct behaviour. Upgrade deliberately, never incidentally. |
 | Voice reads as trying too hard | The `professional` tone must be genuinely usable. If the dry tone cannot survive its own fixture snapshots being read aloud, it is too much. |
 | Eight weeks becomes twelve | The cut list exists to be used. Week 8 ships whatever weeks 1–7 produced, finished and documented, rather than slipping. |
 
