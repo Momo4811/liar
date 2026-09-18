@@ -545,6 +545,7 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
+ "walkdir",
 ]
 
 [[package]]
