@@ -90,6 +90,31 @@ liar check src/ --tone brutal
 Dry is the default. `professional` exists so the tool is usable at work, which
 is both a genuine kindness and, in itself, the joke.
 
+## In your editor
+
+A language server ships alongside the CLI, and a VS Code extension launches it.
+Findings appear as you save, in the tone you chose, with a one-click fix for the
+missing `await`:
+
+```
+Add await
+  save_user(request.user)
+  ^ inserts "await " here
+```
+
+The fix is offered only inside an `async def`. Adding `await` in a plain `def`
+would produce a syntax error, which is a worse outcome than the bug it was
+meant to fix.
+
+```bash
+cargo build --release -p liar-lsp      # put liar-lsp on PATH
+cd editors/vscode && npm install && npx tsc -p ./
+```
+
+Settings are `liar.enable`, `liar.tone` and `liar.path`. The extension is 125
+lines of TypeScript and holds no analysis logic whatsoever — the server decides
+what a finding is, so the editor and the command line can never disagree.
+
 ## Running it
 
 ```bash
@@ -142,7 +167,7 @@ Everything is arena-allocated and referenced by typed integer index — the way
 ## Tests
 
 ```bash
-cargo test        # 220 tests
+cargo test        # 263 tests
 ```
 
 Fixtures declare their expectations inline, and **an unexpected finding fails as
@@ -163,12 +188,21 @@ taught it and no false positive can return.
 
 ## Status
 
-Working: the engine, the index, C1 and C2, the corpus, the CLI.
-Next: a language server and an editor extension, then the remaining checks.
+Working: the engine, the index, C1 and C2, the corpus, the CLI, the language
+server and the VS Code extension.
+
+Next: type inference and the checks that need it — names that contradict their
+types, resources not released on every path out, and docstrings the code
+disagrees with.
+
+Not yet done: the extension has been driven through a real LSP handshake by
+`scripts/lsp-smoke.py`, which runs in CI, but it has not been exercised by hand
+inside VS Code and there is no screen recording here yet. The panic guard in
+the server is implemented and not directly tested.
 
 Design notes and the reasoning behind each decision are in
-[`docs/`](docs/) — including why the parser was chosen and what was given up
-for it.
+[`docs/`](docs/) — including why the parser was chosen, what was given up for
+it, and a false positive found in the wild and fixed.
 
 ## Licence
 
