@@ -8,10 +8,12 @@ mod render;
 
 use clap::{Parser, Subcommand};
 use config::Config;
-use liar_core::ast::parse;
-use liar_core::finding::Finding;
+use liar_core::analysis::analyse;
+use liar_core::ast::{Ast, parse};
+use liar_core::ids::FileId;
 use liar_core::messages::{MessageTable, Tone};
 use liar_core::source::SourceMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -75,16 +77,14 @@ fn run(cli: Cli) -> Result<bool, String> {
     let files = discover::discover(&paths, &settings.exclude).map_err(|e| e.to_string())?;
 
     let mut sources = SourceMap::new();
-    let mut findings: Vec<Finding> = Vec::new();
+    let mut asts: BTreeMap<FileId, Ast> = BTreeMap::new();
 
     for path in files {
         let text = std::fs::read_to_string(&path)
             .map_err(|e| format!("could not read {}: {e}", path.display()))?;
         let file_id = sources.add(path.clone(), text);
 
-        // Parsing is the whole pipeline for now. The index and the checks that
-        // turn a syntax tree into findings come next.
-        parse(sources.get(file_id).text()).map_err(|e| {
+        let ast = parse(sources.get(file_id).text()).map_err(|e| {
             let position = sources.get(file_id).position(e.span.start);
             format!(
                 "{}:{}:{}: {}",
@@ -94,7 +94,12 @@ fn run(cli: Cli) -> Result<bool, String> {
                 e.message
             )
         })?;
+        asts.insert(file_id, ast);
     }
+
+    // Analysed as one project rather than file by file, so a name imported
+    // from another file resolves to its real definition.
+    let mut findings = analyse(&sources, &asts);
 
     // Filtering here rather than inside each check means a disabled check
     // costs nothing to add and cannot leak a finding by forgetting to ask.

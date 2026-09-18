@@ -279,6 +279,16 @@ impl Ast {
         self.body = body;
     }
 
+    /// Every expression in the file, in allocation order.
+    pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &Expr)> {
+        self.exprs.iter()
+    }
+
+    /// Every statement in the file, in allocation order.
+    pub fn stmts(&self) -> impl Iterator<Item = (StmtId, &Stmt)> {
+        self.stmts.iter()
+    }
+
     pub fn stmt_count(&self) -> usize {
         self.stmts.len()
     }
