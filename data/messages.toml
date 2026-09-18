@@ -1,0 +1,61 @@
+# The tool's voice. Three tones per check, no exceptions.
+#
+# The humour comes from being accurate, not from jokes. "4 variables called
+# 'data' in this file. none are related." is funny because it is true and
+# specific. A gag is funny once and irritating on the two-hundredth run.
+#
+# The professional tone must be genuinely usable at work. That is both a
+# kindness and, in itself, the joke.
+#
+# Placeholders are {name}-style and must match the args each check supplies.
+# A placeholder with no argument is an error, not a blank.
+
+[C1]
+professional = "coroutine '{name}' is called but never awaited"
+dry          = "'{name}' is never awaited. this line does nothing."
+brutal       = "you wrote '{name}()' and then threw it away."
+
+[C2]
+professional = "blocking call '{name}' inside an async function"
+dry          = "'{name}' blocks. every other task waits for it."
+brutal       = "'{name}' here stops the entire event loop. all of it."
+
+[C3a]
+professional = "'{name}' is named as a boolean but its type is {ty}"
+dry          = "'{name}' returns {ty}. one of us is confused."
+brutal       = "'{name}' is not a question if the answer is a {ty}."
+
+[C3b]
+professional = "'{name}' is named as a quantity but its type is {ty}"
+dry          = "'{name}' is a {ty}. a count is a number."
+brutal       = "counting is done with numbers, not with a {ty}."
+
+[C3c]
+professional = "'{name}' is {name_number} but its value is {value_number}"
+dry          = "'{name}' is {name_number}. its value is {value_number}."
+brutal       = "pick one: is '{name}' {name_number} or {value_number}?"
+
+[C3d]
+professional = "'{name}' is named as an accessor but mutates {target}"
+dry          = "'{name}' says get. it writes to {target}."
+brutal       = "'{name}' is not getting anything. it is changing {target}."
+
+[C3e]
+professional = "'{name}' is uninformative across {lines} lines of scope"
+dry          = "'{name}' tells the reader nothing, for {lines} lines."
+brutal       = "{lines} lines of '{name}'. name it something."
+
+[C3f]
+professional = "'{name}' is bound {n} times in this file with {k} different types"
+dry          = "{n} variables called '{name}' in this file. none are related."
+brutal       = "{n} things called '{name}'. pick a lane."
+
+[C4]
+professional = "'{name}' is not released on every path out of this function"
+dry          = "'{name}' is released on {released} of {total} paths."
+brutal       = "'{name}' leaks the moment anything raises."
+
+[C5]
+professional = "the docstring of '{name}' does not match its implementation: {detail}"
+dry          = "the docstring says {detail}. the code disagrees."
+brutal       = "the docstring for '{name}' is fiction. {detail}"
