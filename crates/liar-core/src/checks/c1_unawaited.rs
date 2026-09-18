@@ -121,6 +121,12 @@ fn resolve_callee(
     match ast.expr(func) {
         Expr::Name { name, .. } => {
             let resolved = ctx.index.resolve(file, scope, name)?;
+            // A decorator can change what calling this means. @gen_test turns
+            // a coroutine function into a synchronous one, and the call that
+            // looks un-awaited is then correct.
+            if resolved.binding.kind.is_decorated() {
+                return None;
+            }
             Some(Callee {
                 name: name.clone(),
                 is_async: resolved.binding.kind.is_async_function(),
@@ -145,6 +151,9 @@ fn resolve_callee(
                 .find(|&candidate| file_index.scopes.scope(candidate).kind == ScopeKind::Class)?;
 
             let binding = file_index.scopes.lookup_local(class_scope, attr)?;
+            if binding.kind.is_decorated() {
+                return None;
+            }
             Some(Callee {
                 name: format!("self.{attr}"),
                 is_async: binding.kind.is_async_function(),

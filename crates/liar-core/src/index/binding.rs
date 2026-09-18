@@ -9,8 +9,15 @@ use crate::span::Span;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum BindingKind {
     /// `def` or `async def`.
+    ///
+    /// `decorated` is carried because a decorator this engine does not model
+    /// can change what calling the function means - `@gen_test` turns a
+    /// coroutine function into a synchronous one - so checks stay quiet about
+    /// decorated definitions rather than reasoning from a signature that is no
+    /// longer the real one.
     Function {
         is_async: bool,
+        decorated: bool,
     },
     Class,
     /// A parameter of the enclosing function.
@@ -33,7 +40,19 @@ pub enum BindingKind {
 
 impl BindingKind {
     pub fn is_async_function(&self) -> bool {
-        matches!(self, BindingKind::Function { is_async: true })
+        matches!(self, BindingKind::Function { is_async: true, .. })
+    }
+
+    /// Whether this is a definition whose calling convention may have been
+    /// rewritten by a decorator.
+    pub fn is_decorated(&self) -> bool {
+        matches!(
+            self,
+            BindingKind::Function {
+                decorated: true,
+                ..
+            }
+        )
     }
 
     pub fn is_function(&self) -> bool {
@@ -77,14 +96,26 @@ mod tests {
 
     #[test]
     fn an_async_function_reports_itself_as_one() {
-        let binding = Binding::new(BindingKind::Function { is_async: true }, span());
+        let binding = Binding::new(
+            BindingKind::Function {
+                is_async: true,
+                decorated: false,
+            },
+            span(),
+        );
         assert!(binding.kind.is_async_function());
         assert!(binding.kind.is_function());
     }
 
     #[test]
     fn a_sync_function_is_a_function_but_not_async() {
-        let binding = Binding::new(BindingKind::Function { is_async: false }, span());
+        let binding = Binding::new(
+            BindingKind::Function {
+                is_async: false,
+                decorated: false,
+            },
+            span(),
+        );
         assert!(!binding.kind.is_async_function());
         assert!(binding.kind.is_function());
     }
@@ -134,7 +165,10 @@ mod tests {
     #[test]
     fn bindings_that_are_not_imports_have_no_path() {
         for kind in [
-            BindingKind::Function { is_async: false },
+            BindingKind::Function {
+                is_async: false,
+                decorated: false,
+            },
             BindingKind::Class,
             BindingKind::Parameter,
             BindingKind::Variable,

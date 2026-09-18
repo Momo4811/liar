@@ -1,0 +1,39 @@
+name: corpus
+
+# Not on every push: this downloads packages from PyPI, and a network hiccup
+# should not turn the main gate red. Nightly, plus on demand.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Fetch the corpus
+        run: python corpus/fetch.py
+
+      - name: Scan
+        run: |
+          cargo run --release -p liar-cli -- check corpus/packages > findings.txt || true
+          echo "--- findings ---"
+          cat findings.txt
+
+      - name: Assert no panics
+        run: |
+          if grep -qiE "panicked at|RUST_BACKTRACE" findings.txt; then
+            echo "The analyser panicked on real code."
+            exit 1
+          fi
+          echo "No panics."
+
+      - name: Compare against the baseline
+        run: python corpus/compare.py findings.txt corpus/baseline.json

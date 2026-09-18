@@ -47,6 +47,10 @@ type FuncKey = (FileId, Span);
 struct Function {
     key: FuncKey,
     is_async: bool,
+    /// A decorator can wrap the body in a thread, a cache, or nothing at all.
+    /// Since the engine does not model decorators, a decorated function's
+    /// blocking is not propagated to its callers.
+    decorated: bool,
     body_scope: ScopeId,
     file: FileId,
 }
@@ -102,6 +106,7 @@ fn collect_functions(ctx: &Ctx<'_>) -> Vec<Function> {
             let Stmt::FunctionDef {
                 is_async,
                 name_span,
+                decorators,
                 ..
             } = ast.stmt(stmt)
             else {
@@ -114,6 +119,7 @@ fn collect_functions(ctx: &Ctx<'_>) -> Vec<Function> {
             functions.push(Function {
                 key: (file, *name_span),
                 is_async: *is_async,
+                decorated: !decorators.is_empty(),
                 body_scope,
                 file,
             });
@@ -172,9 +178,12 @@ fn propagate(ctx: &Ctx<'_>, table: &Table, functions: &[Function]) -> HashSet<Fu
         }
     }
 
+    // Only undecorated sync functions can carry blocking to their callers. A
+    // decorator can wrap the body in a thread, a cache, or nothing at all, and
+    // the engine does not model them.
     let sync: HashSet<FuncKey> = functions
         .iter()
-        .filter(|f| !f.is_async)
+        .filter(|f| !f.is_async && !f.decorated)
         .map(|f| f.key)
         .collect();
 

@@ -1,0 +1,11 @@
+{
+  "comment": "Per-check finding counts on the pinned corpus. CI fails if a count moves by more than 20% without this file being updated in the same commit, so a change has to be explained rather than absorbed.",
+  "corpus": "corpus/packages.txt",
+  "generated": "2026-09-19",
+  "files": 1305,
+  "packages": 19,
+  "counts": {
+    "C1": 0,
+    "C2": 1
+  }
+}

@@ -195,7 +195,13 @@ mod tests {
         tree.bind(
             root,
             "f",
-            Binding::new(BindingKind::Function { is_async: false }, span()),
+            Binding::new(
+                BindingKind::Function {
+                    is_async: false,
+                    decorated: false,
+                },
+                span(),
+            ),
         );
         tree.bind(root, "f", Binding::new(BindingKind::Variable, span()));
 

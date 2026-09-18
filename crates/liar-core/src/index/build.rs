@@ -77,6 +77,7 @@ fn walk(index: &mut FileIndex, ast: &Ast, stmts: &[StmtId], scope: ScopeId) {
                 is_async,
                 params,
                 body,
+                decorators,
                 name_span,
                 span,
                 ..
@@ -87,6 +88,7 @@ fn walk(index: &mut FileIndex, ast: &Ast, stmts: &[StmtId], scope: ScopeId) {
                     Binding::new(
                         BindingKind::Function {
                             is_async: *is_async,
+                            decorated: !decorators.is_empty(),
                         },
                         *name_span,
                     ),
@@ -275,13 +277,25 @@ mod tests {
     #[test]
     fn a_function_binds_its_name() {
         let binding = root_binding("def greet():\n    pass\n", "greet").unwrap();
-        assert_eq!(binding.kind, BindingKind::Function { is_async: false });
+        assert_eq!(
+            binding.kind,
+            BindingKind::Function {
+                is_async: false,
+                decorated: false
+            }
+        );
     }
 
     #[test]
     fn an_async_function_records_that_it_is_async() {
         let binding = root_binding("async def fetch():\n    pass\n", "fetch").unwrap();
-        assert_eq!(binding.kind, BindingKind::Function { is_async: true });
+        assert_eq!(
+            binding.kind,
+            BindingKind::Function {
+                is_async: true,
+                decorated: false
+            }
+        );
         assert!(binding.kind.is_async_function());
     }
 

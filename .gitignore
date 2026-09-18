@@ -4,3 +4,5 @@
 
 # insta writes these when a snapshot changes; review then accept, never commit
 **/*.snap.new
+/corpus/packages/
+/corpus/wheels/
