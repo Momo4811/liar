@@ -2,10 +2,6 @@
 
 #![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn workspace_builds() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod ids;
+
+pub use ids::{Arena, FileId, Id, NodeId};
