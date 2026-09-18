@@ -9,7 +9,7 @@
 //! a test suite that already defines correct behaviour.
 
 use crate::ast::parse::ParseError;
-use crate::ast::{Ast, ConstantKind, Expr, ExprId, Param, Stmt, StmtId};
+use crate::ast::{Ast, ConstantKind, Expr, ExprId, ImportAlias, Param, Stmt, StmtId};
 use crate::span::Span;
 use ruff_python_ast as py;
 use ruff_text_size::{Ranged, TextRange};
@@ -76,6 +76,17 @@ fn convert_params(ast: &mut Ast, parameters: &py::Parameters) -> Vec<Param> {
     }
 
     params
+}
+
+fn convert_aliases(aliases: &[py::Alias]) -> Vec<ImportAlias> {
+    aliases
+        .iter()
+        .map(|alias| ImportAlias {
+            name: alias.name.id.to_string(),
+            asname: alias.asname.as_ref().map(|a| a.id.to_string()),
+            span: span(alias.range),
+        })
+        .collect()
 }
 
 fn convert_stmt(ast: &mut Ast, stmt: &py::Stmt) -> StmtId {
@@ -155,6 +166,18 @@ fn convert_stmt(ast: &mut Ast, stmt: &py::Stmt) -> StmtId {
                 span: span(node.range),
             }
         }
+
+        py::Stmt::Import(node) => Stmt::Import {
+            aliases: convert_aliases(&node.names),
+            span: span(node.range),
+        },
+
+        py::Stmt::ImportFrom(node) => Stmt::ImportFrom {
+            module: node.module.as_ref().map(|m| m.id.to_string()),
+            level: node.level,
+            aliases: convert_aliases(&node.names),
+            span: span(node.range),
+        },
 
         py::Stmt::Pass(node) => Stmt::Pass {
             span: span(node.range),

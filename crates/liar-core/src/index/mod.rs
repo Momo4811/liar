@@ -5,7 +5,9 @@
 //! and it is how false positives get in.
 
 pub mod binding;
+pub mod build;
 pub mod scope;
 
 pub use binding::{Binding, BindingKind};
+pub use build::{FileIndex, build_file};
 pub use scope::{Scope, ScopeId, ScopeKind, ScopeTree};

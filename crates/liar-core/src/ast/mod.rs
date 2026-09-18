@@ -20,6 +20,15 @@ pub use parse::{ParseError, parse};
 define_id!(StmtId);
 define_id!(ExprId);
 
+/// One name introduced by an import statement.
+#[derive(Clone, PartialEq, Debug)]
+pub struct ImportAlias {
+    /// The dotted module or name as written: `a.b` in `import a.b`.
+    pub name: String,
+    pub asname: Option<String>,
+    pub span: Span,
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Param {
     pub name: String,
@@ -63,6 +72,21 @@ pub enum Stmt {
         value: ExprId,
         span: Span,
     },
+    /// `import a`, `import a.b as c`.
+    Import {
+        aliases: Vec<ImportAlias>,
+        span: Span,
+    },
+    /// `from a.b import c`, `from . import d`.
+    ///
+    /// `level` is the number of leading dots, so a relative import can be
+    /// resolved against the importing file's own package.
+    ImportFrom {
+        module: Option<String>,
+        level: u32,
+        aliases: Vec<ImportAlias>,
+        span: Span,
+    },
     Pass {
         span: Span,
     },
@@ -81,6 +105,8 @@ impl Stmt {
             | Stmt::Assign { span, .. }
             | Stmt::Return { span, .. }
             | Stmt::Expr { span, .. }
+            | Stmt::Import { span, .. }
+            | Stmt::ImportFrom { span, .. }
             | Stmt::Pass { span }
             | Stmt::Unsupported { span } => *span,
         }
