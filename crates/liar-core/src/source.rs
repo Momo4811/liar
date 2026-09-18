@@ -85,6 +85,29 @@ impl SourceFile {
         }
     }
 
+    /// The byte offset of a 1-based line and column, if the file has one.
+    ///
+    /// The inverse of [`SourceFile::position`]: columns count characters, so
+    /// this is what turns a location a human typed into one the engine can use.
+    pub fn offset_at(&self, line: u32, column: u32) -> Option<u32> {
+        if line == 0 || column == 0 || line > self.line_count() {
+            return None;
+        }
+
+        let start = self.line_starts[(line - 1) as usize] as usize;
+        let text = self.line_text(line);
+
+        let within = text
+            .char_indices()
+            .nth((column - 1) as usize)
+            .map(|(offset, _)| offset)
+            // One past the last character is a legitimate position: it is where
+            // the cursor sits at the end of a line.
+            .or_else(|| (column as usize == text.chars().count() + 1).then_some(text.len()))?;
+
+        Some((start + within) as u32)
+    }
+
     /// Text of a 1-based line, without its terminator.
     ///
     /// # Panics
@@ -233,6 +256,36 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(map.get(a).text(), "a");
         assert_eq!(map.get(b).text(), "b");
+    }
+
+    #[test]
+    fn offset_at_inverts_position() {
+        for source in ["abc", "ab\ncd", "a\u{e9}b\nxy", "\u{1f980}z", ""] {
+            let f = file(source);
+            for (offset, _) in f.text().char_indices() {
+                let position = f.position(offset as u32);
+                assert_eq!(
+                    f.offset_at(position.line, position.column),
+                    Some(offset as u32),
+                    "round trip failed at offset {offset} of {source:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn offset_at_accepts_the_end_of_a_line() {
+        let f = file("ab\ncd");
+        assert_eq!(f.offset_at(1, 3), Some(2));
+    }
+
+    #[test]
+    fn offset_at_rejects_positions_outside_the_file() {
+        let f = file("ab\ncd");
+        assert_eq!(f.offset_at(0, 1), None);
+        assert_eq!(f.offset_at(1, 0), None);
+        assert_eq!(f.offset_at(9, 1), None);
+        assert_eq!(f.offset_at(1, 99), None);
     }
 
     #[test]
