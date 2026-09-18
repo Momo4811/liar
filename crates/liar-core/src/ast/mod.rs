@@ -12,6 +12,11 @@ use crate::define_id;
 use crate::ids::Arena;
 use crate::span::Span;
 
+mod convert;
+pub mod parse;
+
+pub use parse::{ParseError, parse};
+
 define_id!(StmtId);
 define_id!(ExprId);
 
@@ -125,6 +130,7 @@ pub enum Expr {
 pub enum ConstantKind {
     Int,
     Float,
+    Complex,
     Str,
     Bytes,
     Bool,
