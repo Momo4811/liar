@@ -22,3 +22,15 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test --all
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Drives the shipped binary through a real LSP handshake. A failure here
+      # means the thing an editor actually launches is broken, which the unit
+      # tests cannot tell you.
+      - name: Language server end to end
+        run: |
+          cargo build --release -p liar-lsp
+          python scripts/lsp-smoke.py ./target/release/liar-lsp

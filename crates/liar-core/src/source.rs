@@ -121,7 +121,14 @@ impl SourceFile {
             .get(index + 1)
             .map_or(self.text.len(), |&next| next as usize);
 
-        self.text[start..end].trim_end_matches(['\n', '\r'])
+        // Exactly one line terminator, not every trailing carriage
+        // return. trim_end_matches would eat the content of a file
+        // containing bare CRs while position() still counted them as
+        // columns, leaving a column past the end of the line.
+        let line = &self.text[start..end];
+        line.strip_suffix("\r\n")
+            .or_else(|| line.strip_suffix('\n'))
+            .unwrap_or(line)
     }
 }
 
@@ -246,6 +253,22 @@ mod tests {
         assert_eq!(f.line_text(1), "ab");
         assert_eq!(f.line_text(2), "cd");
         assert_eq!(f.line_text(3), "ef");
+    }
+
+    #[test]
+    fn line_text_keeps_bare_carriage_returns() {
+        // Minimal counterexample from the LSP range property test. A bare CR
+        // is not a line terminator in this model, so it is content and must
+        // survive - otherwise a column can point past the end of its line.
+        let f = file("\r\r");
+        assert_eq!(f.line_count(), 1);
+        assert_eq!(f.line_text(1), "\r\r");
+    }
+
+    #[test]
+    fn line_text_strips_only_one_terminator() {
+        let f = file("ab\r\r\ncd");
+        assert_eq!(f.line_text(1), "ab\r", "only the CRLF pair is a terminator");
     }
 
     #[test]
