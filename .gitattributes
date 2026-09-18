@@ -1,0 +1,8 @@
+# Normalise line endings in the repository to LF, so CI on Linux and a
+# checkout on Windows agree.
+* text=auto eol=lf
+
+# Fixtures are byte-exact on purpose. Some of them test how the analyser
+# handles CRLF, BOMs and unusual encodings; normalising them would rewrite
+# the very thing under test and the assertion would quietly pass forever.
+tests/fixtures/** -text

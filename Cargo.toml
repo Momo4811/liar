@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+members = ["crates/liar-core", "crates/liar-cli"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Momo4811/liar"
+
+[workspace.dependencies]
+ruff_python_parser = "=0.0.13"
+ruff_python_ast    = "=0.0.13"
+annotate-snippets  = "0.12"
+clap               = { version = "4", features = ["derive"] }
+serde              = { version = "1", features = ["derive"] }
+toml               = "0.9"
+thiserror          = "2"
+insta              = "1"
+proptest           = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+debug = 1
