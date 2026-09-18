@@ -1,0 +1,10 @@
+---
+source: crates/liar-cli/src/render.rs
+assertion_line: 117
+expression: out
+---
+error[C1]: you wrote 'save_user()' and then threw it away.
+ --> example.py:2:5
+  |
+2 |     save_user(u)
+  |     ^^^^^^^^^^^^

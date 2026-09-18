@@ -1,0 +1,10 @@
+---
+source: crates/liar-cli/src/render.rs
+assertion_line: 106
+expression: out
+---
+error[C1]: 'save_user' is never awaited. this line does nothing.
+ --> example.py:2:5
+  |
+2 |     save_user(u)
+  |     ^^^^^^^^^^^^

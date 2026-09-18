@@ -19,6 +19,11 @@ clap.workspace = true
 serde.workspace = true
 toml.workspace = true
 thiserror.workspace = true
+walkdir.workspace = true
+globset.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+tempfile.workspace = true
+assert_cmd.workspace = true
+predicates.workspace = true

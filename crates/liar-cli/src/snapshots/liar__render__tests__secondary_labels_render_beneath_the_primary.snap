@@ -1,0 +1,14 @@
+---
+source: crates/liar-cli/src/render.rs
+assertion_line: 131
+expression: out
+---
+warning[C3f]: 3 variables called 'data' in this file. none are related.
+ --> example.py:1:1
+  |
+1 | data = 1
+  | ^^^^
+2 | data = []
+  | ----
+3 | data = 'x'
+  | ----

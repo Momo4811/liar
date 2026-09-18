@@ -1,0 +1,10 @@
+---
+source: crates/liar-cli/src/render.rs
+assertion_line: 117
+expression: out
+---
+error[C1]: coroutine 'save_user' is called but never awaited
+ --> example.py:2:5
+  |
+2 |     save_user(u)
+  |     ^^^^^^^^^^^^
