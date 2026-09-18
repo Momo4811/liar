@@ -20,6 +20,24 @@ pub use parse::{ParseError, parse};
 define_id!(StmtId);
 define_id!(ExprId);
 
+/// One `with` item: the context manager and the name it is bound to.
+#[derive(Clone, PartialEq, Debug)]
+pub struct WithItem {
+    pub context: ExprId,
+    pub target: Option<ExprId>,
+    pub span: Span,
+}
+
+/// One `except` clause.
+#[derive(Clone, PartialEq, Debug)]
+pub struct ExceptHandler {
+    pub exception_type: Option<ExprId>,
+    /// The name in `except E as name`.
+    pub name: Option<String>,
+    pub body: Vec<StmtId>,
+    pub span: Span,
+}
+
 /// One name introduced by an import statement.
 #[derive(Clone, PartialEq, Debug)]
 pub struct ImportAlias {
@@ -72,6 +90,41 @@ pub enum Stmt {
         value: ExprId,
         span: Span,
     },
+    /// `elif` is desugared into a nested `If` in `orelse`, which keeps the
+    /// branching structure exact rather than flattening it.
+    If {
+        test: ExprId,
+        body: Vec<StmtId>,
+        orelse: Vec<StmtId>,
+        span: Span,
+    },
+    For {
+        target: ExprId,
+        iter: ExprId,
+        body: Vec<StmtId>,
+        orelse: Vec<StmtId>,
+        is_async: bool,
+        span: Span,
+    },
+    While {
+        test: ExprId,
+        body: Vec<StmtId>,
+        orelse: Vec<StmtId>,
+        span: Span,
+    },
+    With {
+        items: Vec<WithItem>,
+        body: Vec<StmtId>,
+        is_async: bool,
+        span: Span,
+    },
+    Try {
+        body: Vec<StmtId>,
+        handlers: Vec<ExceptHandler>,
+        orelse: Vec<StmtId>,
+        finalbody: Vec<StmtId>,
+        span: Span,
+    },
     /// `import a`, `import a.b as c`.
     Import {
         aliases: Vec<ImportAlias>,
@@ -105,6 +158,11 @@ impl Stmt {
             | Stmt::Assign { span, .. }
             | Stmt::Return { span, .. }
             | Stmt::Expr { span, .. }
+            | Stmt::If { span, .. }
+            | Stmt::For { span, .. }
+            | Stmt::While { span, .. }
+            | Stmt::With { span, .. }
+            | Stmt::Try { span, .. }
             | Stmt::Import { span, .. }
             | Stmt::ImportFrom { span, .. }
             | Stmt::Pass { span }

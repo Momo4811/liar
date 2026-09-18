@@ -52,6 +52,21 @@ pub fn build_file(file: FileId, ast: &Ast) -> FileIndex {
     index
 }
 
+/// Binds a `for` or `with` target, when it is a plain name.
+///
+/// A destructuring target like `for a, b in pairs` is a tuple, which the engine
+/// does not yet model, so nothing is bound. An unbound name resolves to nothing
+/// and every checker stays quiet about it, which is the right outcome.
+fn bind_target(index: &mut FileIndex, ast: &Ast, target: crate::ast::ExprId, scope: ScopeId) {
+    if let Expr::Name { name, span } = ast.expr(target) {
+        index.scopes.bind(
+            scope,
+            name.clone(),
+            Binding::new(BindingKind::Variable, *span),
+        );
+    }
+}
+
 fn walk(index: &mut FileIndex, ast: &Ast, stmts: &[StmtId], scope: ScopeId) {
     for &id in stmts {
         index.stmt_scope.insert(id, scope);
@@ -117,6 +132,56 @@ fn walk(index: &mut FileIndex, ast: &Ast, stmts: &[StmtId], scope: ScopeId) {
                         );
                     }
                 }
+            }
+
+            // Compound statements introduce no scope of their own, so their
+            // bodies are walked in the same one. Before this the bodies were
+            // invisible, and a call inside an `if` could not be checked at all.
+            Stmt::If { body, orelse, .. } | Stmt::While { body, orelse, .. } => {
+                walk(index, ast, body, scope);
+                walk(index, ast, orelse, scope);
+            }
+
+            Stmt::For {
+                target,
+                body,
+                orelse,
+                ..
+            } => {
+                bind_target(index, ast, *target, scope);
+                walk(index, ast, body, scope);
+                walk(index, ast, orelse, scope);
+            }
+
+            Stmt::With { items, body, .. } => {
+                for item in items {
+                    if let Some(target) = item.target {
+                        bind_target(index, ast, target, scope);
+                    }
+                }
+                walk(index, ast, body, scope);
+            }
+
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => {
+                walk(index, ast, body, scope);
+                for handler in handlers {
+                    if let Some(name) = &handler.name {
+                        index.scopes.bind(
+                            scope,
+                            name.clone(),
+                            Binding::new(BindingKind::Variable, handler.span),
+                        );
+                    }
+                    walk(index, ast, &handler.body, scope);
+                }
+                walk(index, ast, orelse, scope);
+                walk(index, ast, finalbody, scope);
             }
 
             Stmt::Import { aliases, .. } => {
@@ -368,10 +433,71 @@ mod tests {
 
     #[test]
     fn unmodelled_statements_bind_nothing_rather_than_guessing() {
-        let (_, index) = build("while True:\n    x = 1\n");
-        // The while loop is Unsupported, so its body is invisible. Inventing a
-        // binding for x would claim knowledge the engine does not have.
+        // A match statement is not modelled, so its body is invisible.
+        // Inventing a binding for y would claim knowledge the engine has not
+        // got.
+        let (_, index) = build("match v:\n    case 1:\n        y = 1\n");
         assert!(index.scopes.scope(index.scopes.root()).bindings.is_empty());
+    }
+
+    #[test]
+    fn statements_inside_control_flow_are_visible() {
+        let (ast, index) = build("if cond:\n    x = 1\nelse:\n    y = 2\n");
+        let root = index.scopes.root();
+
+        assert!(index.scopes.lookup_local(root, "x").is_some());
+        assert!(index.scopes.lookup_local(root, "y").is_some());
+        // Every statement, nested ones included, records its scope.
+        assert!(index.stmt_scope.len() > ast.body().len());
+    }
+
+    #[test]
+    fn a_for_target_binds() {
+        let (_, index) = build("for item in things:\n    pass\n");
+        let binding = index
+            .scopes
+            .lookup_local(index.scopes.root(), "item")
+            .unwrap();
+        assert_eq!(binding.kind, BindingKind::Variable);
+    }
+
+    #[test]
+    fn a_with_target_binds() {
+        let (_, index) = build("with open(p) as handle:\n    pass\n");
+        assert!(
+            index
+                .scopes
+                .lookup_local(index.scopes.root(), "handle")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn an_except_alias_binds() {
+        let (_, index) = build("try:\n    pass\nexcept ValueError as err:\n    pass\n");
+        assert!(
+            index
+                .scopes
+                .lookup_local(index.scopes.root(), "err")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_destructuring_for_target_binds_nothing_rather_than_guessing() {
+        // Tuple targets are not modelled. Binding one of the names, or guessing
+        // at them, would be worse than binding neither.
+        let (_, index) = build("for a, b in pairs:\n    pass\n");
+        let root = index.scopes.root();
+        assert!(index.scopes.lookup_local(root, "a").is_none());
+        assert!(index.scopes.lookup_local(root, "b").is_none());
+    }
+
+    #[test]
+    fn a_function_defined_inside_an_if_still_binds() {
+        let (_, index) = build("if flag:\n    async def f():\n        pass\n");
+        let binding = index.scopes.lookup_local(index.scopes.root(), "f").unwrap();
+        assert!(binding.kind.is_async_function());
     }
 
     #[test]

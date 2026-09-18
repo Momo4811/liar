@@ -9,7 +9,9 @@
 //! a test suite that already defines correct behaviour.
 
 use crate::ast::parse::ParseError;
-use crate::ast::{Ast, ConstantKind, Expr, ExprId, ImportAlias, Param, Stmt, StmtId};
+use crate::ast::{
+    Ast, ConstantKind, ExceptHandler, Expr, ExprId, ImportAlias, Param, Stmt, StmtId, WithItem,
+};
 use crate::span::Span;
 use ruff_python_ast as py;
 use ruff_text_size::{Ranged, TextRange};
@@ -89,6 +91,66 @@ fn convert_aliases(aliases: &[py::Alias]) -> Vec<ImportAlias> {
         .collect()
 }
 
+/// Turns ruff's flat `elif`/`else` clause list into nested `If` statements.
+///
+/// Built from the end backwards, so each `elif` becomes the `orelse` of the one
+/// before it. Flattening them instead would lose which test guards which branch,
+/// which the control flow graph will need.
+fn convert_elif_else(ast: &mut Ast, clauses: &[py::ElifElseClause]) -> Vec<StmtId> {
+    let mut orelse: Vec<StmtId> = Vec::new();
+
+    for clause in clauses.iter().rev() {
+        match &clause.test {
+            None => orelse = convert_body(ast, &clause.body),
+            Some(test) => {
+                let test = convert_expr(ast, test);
+                let body = convert_body(ast, &clause.body);
+                let nested = ast.alloc_stmt(Stmt::If {
+                    test,
+                    body,
+                    orelse,
+                    span: span(clause.range),
+                });
+                orelse = vec![nested];
+            }
+        }
+    }
+
+    orelse
+}
+
+fn convert_handlers(ast: &mut Ast, handlers: &[py::ExceptHandler]) -> Vec<ExceptHandler> {
+    handlers
+        .iter()
+        .map(|handler| {
+            let py::ExceptHandler::ExceptHandler(handler) = handler;
+            let exception_type = handler.type_.as_ref().map(|t| convert_expr(ast, t));
+            let body = convert_body(ast, &handler.body);
+            ExceptHandler {
+                exception_type,
+                name: handler.name.as_ref().map(|n| n.id.to_string()),
+                body,
+                span: span(handler.range),
+            }
+        })
+        .collect()
+}
+
+fn convert_with_items(ast: &mut Ast, items: &[py::WithItem]) -> Vec<WithItem> {
+    items
+        .iter()
+        .map(|item| {
+            let context = convert_expr(ast, &item.context_expr);
+            let target = item.optional_vars.as_ref().map(|v| convert_expr(ast, v));
+            WithItem {
+                context,
+                target,
+                span: span(item.range),
+            }
+        })
+        .collect()
+}
+
 fn convert_stmt(ast: &mut Ast, stmt: &py::Stmt) -> StmtId {
     let converted = match stmt {
         py::Stmt::FunctionDef(node) => {
@@ -163,6 +225,70 @@ fn convert_stmt(ast: &mut Ast, stmt: &py::Stmt) -> StmtId {
             let value = convert_expr(ast, &node.value);
             Stmt::Expr {
                 value,
+                span: span(node.range),
+            }
+        }
+
+        py::Stmt::If(node) => {
+            let test = convert_expr(ast, &node.test);
+            let body = convert_body(ast, &node.body);
+            let orelse = convert_elif_else(ast, &node.elif_else_clauses);
+            Stmt::If {
+                test,
+                body,
+                orelse,
+                span: span(node.range),
+            }
+        }
+
+        py::Stmt::For(node) => {
+            let target = convert_expr(ast, &node.target);
+            let iter = convert_expr(ast, &node.iter);
+            let body = convert_body(ast, &node.body);
+            let orelse = convert_body(ast, &node.orelse);
+            Stmt::For {
+                target,
+                iter,
+                body,
+                orelse,
+                is_async: node.is_async,
+                span: span(node.range),
+            }
+        }
+
+        py::Stmt::While(node) => {
+            let test = convert_expr(ast, &node.test);
+            let body = convert_body(ast, &node.body);
+            let orelse = convert_body(ast, &node.orelse);
+            Stmt::While {
+                test,
+                body,
+                orelse,
+                span: span(node.range),
+            }
+        }
+
+        py::Stmt::With(node) => {
+            let items = convert_with_items(ast, &node.items);
+            let body = convert_body(ast, &node.body);
+            Stmt::With {
+                items,
+                body,
+                is_async: node.is_async,
+                span: span(node.range),
+            }
+        }
+
+        py::Stmt::Try(node) => {
+            let body = convert_body(ast, &node.body);
+            let handlers = convert_handlers(ast, &node.handlers);
+            let orelse = convert_body(ast, &node.orelse);
+            let finalbody = convert_body(ast, &node.finalbody);
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
                 span: span(node.range),
             }
         }

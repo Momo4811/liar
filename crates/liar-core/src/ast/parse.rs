@@ -223,8 +223,53 @@ mod tests {
 
     #[test]
     fn unmodelled_syntax_becomes_unsupported_rather_than_an_error() {
-        let ast = parse_ok("while True:\n    pass\n");
+        // `del` is not modelled. It parses, carries a span, and is skipped
+        // precisely rather than failing the file.
+        let ast = parse_ok("del x\n");
         assert!(matches!(ast.stmt(ast.body()[0]), Stmt::Unsupported { .. }));
+    }
+
+    #[test]
+    fn compound_statements_expose_their_bodies() {
+        // Control flow has to be transparent, or a checker cannot see a call
+        // inside an `if` - which is where most calls live.
+        for (source, label) in [
+            ("if x:\n    f()\n", "if"),
+            ("for i in xs:\n    f()\n", "for"),
+            ("while x:\n    f()\n", "while"),
+            ("with open(p) as h:\n    f()\n", "with"),
+            ("try:\n    f()\nexcept E:\n    pass\n", "try"),
+        ] {
+            let ast = parse_ok(source);
+            assert!(
+                !matches!(ast.stmt(ast.body()[0]), Stmt::Unsupported { .. }),
+                "{label} should be modelled"
+            );
+        }
+    }
+
+    #[test]
+    fn elif_desugars_into_a_nested_if() {
+        let ast = parse_ok("if a:\n    pass\nelif b:\n    pass\nelse:\n    pass\n");
+        let Stmt::If { orelse, .. } = ast.stmt(ast.body()[0]) else {
+            panic!("expected an if");
+        };
+        assert_eq!(orelse.len(), 1, "the elif should be one nested statement");
+
+        let Stmt::If { orelse: inner, .. } = ast.stmt(orelse[0]) else {
+            panic!("the elif should itself be an if");
+        };
+        assert_eq!(inner.len(), 1, "the else body should hang off the elif");
+    }
+
+    #[test]
+    fn a_plain_else_is_not_wrapped_in_an_if() {
+        let ast = parse_ok("if a:\n    pass\nelse:\n    f()\n");
+        let Stmt::If { orelse, .. } = ast.stmt(ast.body()[0]) else {
+            panic!("expected an if");
+        };
+        assert_eq!(orelse.len(), 1);
+        assert!(matches!(ast.stmt(orelse[0]), Stmt::Expr { .. }));
     }
 
     #[test]
