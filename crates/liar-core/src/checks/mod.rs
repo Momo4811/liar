@@ -5,6 +5,7 @@
 //! positives get in.
 
 pub mod c1_unawaited;
+pub mod c2_blocking;
 
 use crate::ast::Ast;
 use crate::check::CheckId;
@@ -29,7 +30,10 @@ pub trait Check {
 }
 
 pub fn all() -> Vec<Box<dyn Check>> {
-    vec![Box::new(c1_unawaited::UnawaitedCall)]
+    vec![
+        Box::new(c1_unawaited::UnawaitedCall),
+        Box::new(c2_blocking::BlockingCall),
+    ]
 }
 
 #[cfg(test)]

@@ -279,6 +279,82 @@ impl Ast {
         self.body = body;
     }
 
+    /// The expressions written directly in a statement.
+    ///
+    /// Does not descend into the bodies of nested definitions: those run when
+    /// the nested thing is called, not when this statement is reached, and
+    /// conflating the two would attribute a call to the wrong function.
+    pub fn stmt_exprs(&self, stmt: StmtId) -> Vec<ExprId> {
+        let mut out = Vec::new();
+        match self.stmt(stmt) {
+            Stmt::FunctionDef {
+                params,
+                returns,
+                decorators,
+                ..
+            } => {
+                out.extend(params.iter().filter_map(|p| p.annotation));
+                out.extend(returns.iter().copied());
+                out.extend(decorators.iter().copied());
+            }
+            Stmt::ClassDef { decorators, .. } => out.extend(decorators.iter().copied()),
+            Stmt::Assign {
+                targets,
+                value,
+                annotation,
+                ..
+            } => {
+                out.extend(targets.iter().copied());
+                out.push(*value);
+                out.extend(annotation.iter().copied());
+            }
+            Stmt::Return { value, .. } => out.extend(value.iter().copied()),
+            Stmt::Expr { value, .. } => out.push(*value),
+            Stmt::If { test, .. } | Stmt::While { test, .. } => out.push(*test),
+            Stmt::For { target, iter, .. } => {
+                out.push(*target);
+                out.push(*iter);
+            }
+            Stmt::With { items, .. } => {
+                for item in items {
+                    out.push(item.context);
+                    out.extend(item.target.iter().copied());
+                }
+            }
+            Stmt::Try { handlers, .. } => {
+                out.extend(handlers.iter().filter_map(|h| h.exception_type));
+            }
+            Stmt::Pass { .. }
+            | Stmt::Import { .. }
+            | Stmt::ImportFrom { .. }
+            | Stmt::Unsupported { .. } => {}
+        }
+        out
+    }
+
+    /// The direct sub-expressions of an expression.
+    pub fn expr_children(&self, expr: ExprId) -> Vec<ExprId> {
+        match self.expr(expr) {
+            Expr::Attribute { value, .. } | Expr::Await { value, .. } => vec![*value],
+            Expr::Call {
+                func,
+                args,
+                keywords,
+                ..
+            } => {
+                let mut out = vec![*func];
+                out.extend(args.iter().copied());
+                out.extend(keywords.iter().map(|(_, value)| *value));
+                out
+            }
+            Expr::List { elements, .. } => elements.clone(),
+            Expr::Name { .. }
+            | Expr::Constant { .. }
+            | Expr::Dict { .. }
+            | Expr::Unsupported { .. } => Vec::new(),
+        }
+    }
+
     /// Every expression in the file, in allocation order.
     pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &Expr)> {
         self.exprs.iter()

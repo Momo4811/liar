@@ -1,0 +1,75 @@
+# Functions that block the thread they run on.
+#
+# Async code shares one thread between many tasks. A call to one of these inside
+# an async function stops *every* task in the process, not just the one that
+# made the call. It is a performance bug that looks completely innocent, which
+# is why it survives review and ships.
+#
+# Entries are real dotted module paths, not spellings. `time.sleep` is matched
+# whether it was imported as `import time`, `import time as t`, or
+# `from time import sleep`, because the index resolves the name before the
+# comparison is made.
+#
+# This list is data rather than code so that extending it is a one-line change
+# with a fixture, not a patch to a checker.
+
+blocking = [
+  # Sleeping
+  "time.sleep",
+
+  # Processes
+  "os.system",
+  "os.wait",
+  "os.waitpid",
+  "subprocess.run",
+  "subprocess.call",
+  "subprocess.check_call",
+  "subprocess.check_output",
+  "subprocess.getoutput",
+  "subprocess.getstatusoutput",
+
+  # HTTP, the commonest offender by a distance
+  "requests.get",
+  "requests.post",
+  "requests.put",
+  "requests.patch",
+  "requests.delete",
+  "requests.head",
+  "requests.options",
+  "requests.request",
+  "urllib.request.urlopen",
+  "httpx.get",
+  "httpx.post",
+  "httpx.put",
+  "httpx.patch",
+  "httpx.delete",
+  "httpx.request",
+
+  # Sockets
+  "socket.create_connection",
+
+  # Filesystem work heavy enough to matter
+  "shutil.copy",
+  "shutil.copy2",
+  "shutil.copyfile",
+  "shutil.copytree",
+  "shutil.move",
+  "shutil.rmtree",
+]
+
+# Calls that hand work to another thread, so a blocking call anywhere inside
+# their arguments is not blocking the event loop at all.
+#
+# These are matched on the called name alone rather than on a resolved path,
+# because `loop.run_in_executor(...)` calls a method on a value whose type the
+# engine cannot know. That asymmetry is deliberate and safe in one direction
+# only: name matching used for *suppression* can only ever remove findings,
+# while name matching used for *detection* is exactly what manufactures false
+# positives.
+offloading = [
+  "to_thread",
+  "run_in_executor",
+  "run_sync",
+  "submit",
+  "map",
+]

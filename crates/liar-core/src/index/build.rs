@@ -92,7 +92,13 @@ fn walk(index: &mut FileIndex, ast: &Ast, stmts: &[StmtId], scope: ScopeId) {
                     ),
                 );
 
-                let inner = index.scopes.push(ScopeKind::Function, scope, *span);
+                let inner = index.scopes.push(
+                    ScopeKind::Function {
+                        is_async: *is_async,
+                    },
+                    scope,
+                    *span,
+                );
                 index.function_scope.insert(id, inner);
 
                 for param in params {

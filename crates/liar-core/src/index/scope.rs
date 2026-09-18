@@ -12,7 +12,11 @@ define_id!(ScopeId);
 pub enum ScopeKind {
     Module,
     Class,
-    Function,
+    /// Carries its own async-ness, because C2 needs to know whether the
+    /// function a call sits in is one whose thread other tasks are sharing.
+    Function {
+        is_async: bool,
+    },
     /// A comprehension has its own scope in Python 3, which is why the loop
     /// variable of `[x for x in xs]` does not leak.
     Comprehension,
@@ -92,6 +96,21 @@ impl ScopeTree {
         self.scopes.iter()
     }
 
+    /// Whether the nearest enclosing function is async.
+    ///
+    /// Nearest, because a plain `def` nested inside an `async def` is not
+    /// itself async, and a blocking call in it blocks nothing that was not
+    /// already blocked.
+    pub fn in_async_function(&self, scope: ScopeId) -> bool {
+        self.ancestry(scope)
+            .into_iter()
+            .find_map(|id| match self.scope(id).kind {
+                ScopeKind::Function { is_async } => Some(is_async),
+                _ => None,
+            })
+            .unwrap_or(false)
+    }
+
     /// The scopes from `scope` up to the module, in lookup order.
     pub fn ancestry(&self, scope: ScopeId) -> Vec<ScopeId> {
         let mut chain = vec![scope];
@@ -129,8 +148,11 @@ mod tests {
     fn a_function_introduces_a_scope_under_its_parent() {
         let mut tree = ScopeTree::new(span());
         let root = tree.root();
-        let function = tree.push(ScopeKind::Function, root, span());
-        assert_eq!(tree.scope(function).kind, ScopeKind::Function);
+        let function = tree.push(ScopeKind::Function { is_async: false }, root, span());
+        assert_eq!(
+            tree.scope(function).kind,
+            ScopeKind::Function { is_async: false }
+        );
         assert_eq!(tree.scope(function).parent, Some(root));
     }
 
@@ -146,8 +168,8 @@ mod tests {
     fn nested_functions_nest() {
         let mut tree = ScopeTree::new(span());
         let root = tree.root();
-        let outer = tree.push(ScopeKind::Function, root, span());
-        let inner = tree.push(ScopeKind::Function, outer, span());
+        let outer = tree.push(ScopeKind::Function { is_async: false }, root, span());
+        let inner = tree.push(ScopeKind::Function { is_async: false }, outer, span());
         assert_eq!(tree.scope(inner).parent, Some(outer));
         assert_eq!(tree.scope(outer).parent, Some(root));
     }
@@ -156,7 +178,7 @@ mod tests {
     fn a_binding_lands_in_the_scope_it_was_bound_in() {
         let mut tree = ScopeTree::new(span());
         let root = tree.root();
-        let function = tree.push(ScopeKind::Function, root, span());
+        let function = tree.push(ScopeKind::Function { is_async: false }, root, span());
         tree.bind(function, "x", variable());
 
         assert!(tree.lookup_local(function, "x").is_some());
@@ -191,7 +213,7 @@ mod tests {
         let mut tree = ScopeTree::new(span());
         let root = tree.root();
         tree.bind(root, "g", variable());
-        let function = tree.push(ScopeKind::Function, root, span());
+        let function = tree.push(ScopeKind::Function { is_async: false }, root, span());
 
         assert!(tree.lookup_local(function, "g").is_none());
         assert!(tree.lookup_local(root, "g").is_some());
@@ -202,7 +224,7 @@ mod tests {
         let mut tree = ScopeTree::new(span());
         let root = tree.root();
         let class = tree.push(ScopeKind::Class, root, span());
-        let method = tree.push(ScopeKind::Function, class, span());
+        let method = tree.push(ScopeKind::Function { is_async: false }, class, span());
 
         assert_eq!(tree.ancestry(method), vec![method, class, root]);
         assert_eq!(tree.ancestry(root), vec![root]);
@@ -212,5 +234,58 @@ mod tests {
     fn unknown_names_are_absent_rather_than_invented() {
         let tree = ScopeTree::new(span());
         assert!(tree.lookup_local(tree.root(), "nope").is_none());
+    }
+}
+
+#[cfg(test)]
+mod async_tests {
+    use super::*;
+
+    fn span() -> Span {
+        Span::new(0, 10)
+    }
+
+    #[test]
+    fn module_scope_is_not_in_a_function() {
+        let tree = ScopeTree::new(span());
+        assert!(!tree.in_async_function(tree.root()));
+    }
+
+    #[test]
+    fn an_async_function_scope_reports_true() {
+        let mut tree = ScopeTree::new(span());
+        let root = tree.root();
+        let f = tree.push(ScopeKind::Function { is_async: true }, root, span());
+        assert!(tree.in_async_function(f));
+    }
+
+    #[test]
+    fn a_sync_function_scope_reports_false() {
+        let mut tree = ScopeTree::new(span());
+        let root = tree.root();
+        let f = tree.push(ScopeKind::Function { is_async: false }, root, span());
+        assert!(!tree.in_async_function(f));
+    }
+
+    #[test]
+    fn the_nearest_function_wins() {
+        // A plain def nested inside an async def is not async. Blocking inside
+        // it blocks nothing that was not already blocked.
+        let mut tree = ScopeTree::new(span());
+        let root = tree.root();
+        let outer = tree.push(ScopeKind::Function { is_async: true }, root, span());
+        let inner = tree.push(ScopeKind::Function { is_async: false }, outer, span());
+
+        assert!(tree.in_async_function(outer));
+        assert!(!tree.in_async_function(inner));
+    }
+
+    #[test]
+    fn a_class_between_the_scope_and_the_function_does_not_hide_it() {
+        let mut tree = ScopeTree::new(span());
+        let root = tree.root();
+        let f = tree.push(ScopeKind::Function { is_async: true }, root, span());
+        let class = tree.push(ScopeKind::Class, f, span());
+        assert!(tree.in_async_function(class));
     }
 }
