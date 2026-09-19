@@ -46,6 +46,7 @@ found and fixed, is in [`corpus/triage.md`](corpus/triage.md).
 | **C3b** | A name that promises a number and holds something else |
 | **C3e** | A name that says nothing, over a scope long enough to matter |
 | **C3f** | One name meaning several unrelated things |
+| **C4** | A resource not released on every path out — *including the invisible ones* |
 
 ```
 warning[C3f]: 4 variables called 'payload' in this file. none are related.
@@ -64,8 +65,29 @@ warning[C3f]: 4 variables called 'payload' in this file. none are related.
 One finding with a label per occurrence, not four findings — the complaint is
 about the group.
 
-Planned: resources not released on every path out, and docstrings the code
-disagrees with.
+```python
+def read_config(path):
+    f = open(path)
+    data = parse(f.read())   # if this raises...
+    f.close()                # ...this never runs
+    return data
+```
+
+```
+error[C4]: 'f' is released on 2 of 3 paths.
+ --> config.py:2:5
+  |
+2 |     f = open(path)
+  |     ^
+```
+
+Fine on the happy path. Leaks a handle every time `parse` raises, and you find
+out when the process hits the OS descriptor limit a long way from the line
+responsible. Catching it needs a real control flow graph with **exception
+edges** — the admission that almost every statement in Python has an invisible
+edge leaving it — which is why other linters don't.
+
+Planned: docstrings the code disagrees with.
 
 ## The rule the whole thing hangs on
 
@@ -76,7 +98,7 @@ accuracy gets muted; at 90% it gets read. So every ambiguity resolves toward
 saying nothing — an unresolvable name, an unrecognised decorator, a value whose
 type can't be known. It misses real bugs this way, deliberately.
 
-The test suite is shaped by that: **49 negative fixtures against 26 positive
+The test suite is shaped by that: **60 negative fixtures against 32 positive
 ones**. Tests asserting a bug is found measure recall. False positives are the
 only thing that can kill a linter, so most of the suite asserts that it
 correctly says *nothing*.
@@ -201,7 +223,7 @@ Everything is arena-allocated and referenced by typed integer index — the way
 ## Tests
 
 ```bash
-cargo test        # 316 tests
+cargo test        # 339 tests
 ```
 
 Fixtures declare their expectations inline, and **an unexpected finding fails as
@@ -222,11 +244,12 @@ taught it and no false positive can return.
 
 ## Status
 
-Working: the engine, the index, type inference, C1, C2 and four of the C3
-family, the corpus, the CLI, the language server and the VS Code extension.
+Working: the engine, the index, type inference, control flow graphs with
+exception edges, a dataflow solver, C1, C2, four of the C3 family, C4, the
+corpus, the CLI, the language server and the VS Code extension.
 
-Next: control flow graphs with exception edges, and the resource that leaks when
-something goes wrong — the technically deepest check in the plan.
+Next: C5 — docstrings the code disagrees with — and a screen recording, which
+is the one artifact a reader would judge this on that isn't here yet.
 
 **C3e is the weakest thing here and it is worth saying so.** It has no
 correctness content: it is a style opinion about uninformative names, and a

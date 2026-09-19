@@ -202,6 +202,115 @@ shipping C3f now rather than waiting.
 
 ---
 
+## Run 3 — 2026-09-19 — control flow arrives
+
+**Findings:** 161. C4 accounts for 20 of them; the rest are unchanged.
+
+| | run 2 | now |
+|---|---|---|
+| C1 | 0 | 0 |
+| C2 | 1 | 1 |
+| C3a | 7 | 8 |
+| C3b | 19 | 19 |
+| C3e | 109 | 109 |
+| C3f | 4 | 5 |
+| **C4** | — | **20** |
+
+C3a and C3f moved by one apiece because tuples are now modelled, so a name
+hiding in one is visible to the naming checks too.
+
+### ❌ `return` inside `try`/`finally` skipped the finally
+
+The first C4 fixture run caught this, not the corpus, and it is worth recording
+because it would have inverted the check's whole purpose:
+
+```python
+f = open(path)
+try:
+    return parse(f.read())
+finally:
+    f.close()
+```
+
+The graph sent the `return` straight to the exit, so the `close` never ran on
+that path and **the correct way to write this was reported as a leak**. Python
+runs every enclosing finally before leaving; the graph now routes returns
+through them.
+
+### ❌ Escaping had to become a state, not a flag
+
+Two corpus findings pulled in opposite directions.
+
+```python
+for i in range(limit):                  # celery/contrib/rdb.py
+    _sock = socket.socket(...)
+    try:
+        _sock.bind((host, this_port))
+    except OSError:
+        continue                        # nothing escaped - the socket is lost
+    else:
+        return _sock, this_port         # escaped - the caller's problem
+```
+
+```python
+for path in paths:                      # the shape in several packages
+    f = open(path)
+    handles.append(f)                   # escaped every time - all fine
+```
+
+A per-function "does it escape" flag says the same thing about both. Whether
+the escape happened *on the path in question* is the entire distinction, so it
+belongs in the lattice. `Escaped` now sits between `Closed` and `Open`, and
+`Open` wins at a merge because a handle open on any one path is open.
+
+Celery's leak is real: up to `search_limit` sockets lost in a port-search retry
+loop.
+
+### ❌ Tuples were invisible
+
+`return sock, port` and `return (client_socket.close, port)` both hid a name
+inside an unmodelled expression, so the escape rule never saw it. Tuples are now
+in the syntax tree.
+
+### ⚖️ Twenty C4 findings, all true, of very different value
+
+```python
+def get_port_socket(host, port, family):    # aiohttp/test_utils.py
+    s = socket.socket(family, socket.SOCK_STREAM)
+    ...
+    s.bind((host, port))                    # raises -> the socket is lost
+    return s
+```
+
+Real. If `bind` fails, that socket leaks.
+
+```python
+raw_socket = socket.socket(socket.AF_UNIX, socktype)   # anyio/_core/_sockets.py
+raw_socket.setblocking(False)
+if path_str is not None:
+    try:
+        await to_thread.run_sync(raw_socket.bind, path_str, ...)
+    except BaseException:
+        raw_socket.close()
+        raise
+return raw_socket
+```
+
+Also real, and nobody should act on it. The author plainly thought about this —
+there is an `except BaseException` that closes — and what remains is the path
+where `setblocking` itself raises.
+
+**This spread is inherent.** C4 assumes every call can raise, because in Python
+almost every call can. That assumption is what makes the check possible, and it
+is also why some of its findings are true and worthless. There is no
+static rule that separates "bind fails sometimes" from "setblocking never
+fails"; that is domain knowledge.
+
+Twenty findings across 1,305 files is roughly one per sixty-five, which is a
+rate somebody might actually work through — unlike C3e's one per twelve.
+
+---
+
 ## On recall
 
 Recall is not reported here, and will not be. There is no way to know which
@@ -217,6 +326,8 @@ negative fixture proving it:
 - any decorated definition
 - a coroutine assigned to a name that is used again for anything at all
 - destructuring assignment targets
+- a resource acquired anywhere other than a plain `name = call(...)`
+- a resource released by anything other than a method call on its own name
 
 ## An earlier run worth recording
 
