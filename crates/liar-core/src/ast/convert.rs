@@ -50,32 +50,33 @@ fn convert_decorators(ast: &mut Ast, decorators: &[py::Decorator]) -> Vec<ExprId
 fn convert_params(ast: &mut Ast, parameters: &py::Parameters) -> Vec<Param> {
     let mut params = Vec::new();
 
-    let mut push = |ast: &mut Ast, p: &py::Parameter| {
+    let mut push = |ast: &mut Ast, p: &py::Parameter, is_catch_all: bool| {
         let annotation = p.annotation.as_ref().map(|a| convert_expr(ast, a));
         params.push(Param {
             name: p.name.id.to_string(),
             annotation,
             span: span(p.range),
             name_span: span(p.name.range),
+            is_catch_all,
         });
     };
 
     // Declaration order, so a diagnostic about "the third parameter" means
     // what a reader counting them would mean.
     for p in &parameters.posonlyargs {
-        push(ast, &p.parameter);
+        push(ast, &p.parameter, false);
     }
     for p in &parameters.args {
-        push(ast, &p.parameter);
+        push(ast, &p.parameter, false);
     }
     if let Some(vararg) = &parameters.vararg {
-        push(ast, vararg);
+        push(ast, vararg, true);
     }
     for p in &parameters.kwonlyargs {
-        push(ast, &p.parameter);
+        push(ast, &p.parameter, false);
     }
     if let Some(kwarg) = &parameters.kwarg {
-        push(ast, kwarg);
+        push(ast, kwarg, true);
     }
 
     params

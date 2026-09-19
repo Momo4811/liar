@@ -56,6 +56,12 @@ pub struct Param {
     /// The name alone. A diagnostic about a parameter's name must underline
     /// the name, not `b: bytearray`.
     pub name_span: Span,
+    /// Whether this is `*args` or `**kwargs`.
+    ///
+    /// Kept because a function with one can legitimately document names that
+    /// are nowhere in its signature, and guessing that from the parameter
+    /// being *called* `kwargs` gets `**options` wrong.
+    pub is_catch_all: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]
