@@ -5,6 +5,8 @@
 
 pub mod annotation;
 pub mod ty;
+pub mod types;
 
 pub use annotation::from_annotation;
 pub use ty::{ClassKey, Ty};
+pub use types::{DefKey, Types};

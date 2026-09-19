@@ -21,6 +21,21 @@ pub struct FileIndex {
 }
 
 impl FileIndex {
+    /// The statements that belong directly to `scope`.
+    ///
+    /// A statement inside an `if` shares its function's scope, while one inside
+    /// a nested `def` has its own - so comparing scopes gives exactly the
+    /// statements that run when that scope runs, and no others.
+    pub fn stmts_in(&self, scope: ScopeId) -> Vec<StmtId> {
+        let mut stmts: Vec<StmtId> = self
+            .stmt_scope
+            .iter()
+            .filter_map(|(&stmt, &owner)| (owner == scope).then_some(stmt))
+            .collect();
+        stmts.sort_unstable();
+        stmts
+    }
+
     pub fn scope_of(&self, stmt: StmtId) -> ScopeId {
         self.stmt_scope
             .get(&stmt)
