@@ -5,6 +5,7 @@ use crate::checks::{self, Ctx};
 use crate::finding::{Finding, sort_findings};
 use crate::ids::FileId;
 use crate::index::{Index, IndexInput};
+use crate::infer::Types;
 use crate::source::SourceMap;
 use std::collections::BTreeMap;
 
@@ -14,6 +15,28 @@ use std::collections::BTreeMap;
 /// file resolves to its real definition rather than stopping at the import.
 /// Findings come back in the canonical order, so callers never have to sort.
 pub fn analyse(sources: &SourceMap, asts: &BTreeMap<FileId, Ast>) -> Vec<Finding> {
+    analyse_with(sources, asts, &Settings::default())
+}
+
+/// Settings a check needs, which live with the project rather than the engine.
+#[derive(Clone, Copy, Debug)]
+pub struct Settings {
+    pub scope_threshold: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            scope_threshold: 20,
+        }
+    }
+}
+
+pub fn analyse_with(
+    sources: &SourceMap,
+    asts: &BTreeMap<FileId, Ast>,
+    settings: &Settings,
+) -> Vec<Finding> {
     let inputs: Vec<IndexInput<'_>> = asts
         .iter()
         .map(|(&file, ast)| IndexInput {
@@ -24,10 +47,13 @@ pub fn analyse(sources: &SourceMap, asts: &BTreeMap<FileId, Ast>) -> Vec<Finding
         .collect();
 
     let index = Index::build(&inputs);
+    let types = Types::infer(&index, asts);
     let ctx = Ctx {
         index: &index,
         sources,
         asts,
+        types: &types,
+        scope_threshold: settings.scope_threshold,
     };
 
     let mut findings: Vec<Finding> = checks::all()

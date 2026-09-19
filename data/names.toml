@@ -1,0 +1,57 @@
+# What names promise.
+#
+# These checks are opinions about naming, which makes them the likeliest in the
+# tool to annoy somebody. Keeping the judgements here rather than in code means
+# disagreeing with one is a line in a data file plus a fixture, not a patch to a
+# checker.
+#
+# Each list is deliberately short. A longer list finds more, and finds more
+# wrongly, and this tool would rather miss than misfire.
+
+# Prefixes that read as a question, so the answer should be a boolean.
+boolean_prefixes = [
+  "is_",
+  "has_",
+  "can_",
+  "should_",
+  "was_",
+  "does_",
+  "will_",
+  "must_",
+]
+
+# Names that read as a quantity.
+#
+# Kept tight on purpose. `index`, `position`, `level` and `rank` were all
+# considered and left out: an index can be an object, a level can be a logging
+# level, and a rank can be a label. Only words that really do mean "a number of
+# things" are here.
+quantity_exact = ["count", "length", "total", "num"]
+quantity_prefixes = ["num_", "n_"]
+quantity_suffixes = ["_count", "_length", "_total", "_size"]
+
+# Names that tell the reader nothing about what they hold.
+uninformative = [
+  "data",
+  "temp",
+  "tmp",
+  "result",
+  "res",
+  "obj",
+  "val",
+  "value",
+  "item",
+  "thing",
+  "stuff",
+  "info",
+  "foo",
+  "bar",
+  "baz",
+  "arr",
+  "lst",
+  "dct",
+]
+
+# Single letters are uninformative too - except these, which are idiomatic for
+# loop counters and throwaways, and flagging them would be pedantry.
+allowed_short = ["i", "j", "k", "n", "x", "y", "z", "_", "f", "e", "s", "t"]

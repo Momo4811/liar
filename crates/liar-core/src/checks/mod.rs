@@ -6,12 +6,14 @@
 
 pub mod c1_unawaited;
 pub mod c2_blocking;
+pub mod c3_names;
 
 use crate::ast::Ast;
 use crate::check::CheckId;
 use crate::finding::Finding;
 use crate::ids::FileId;
 use crate::index::Index;
+use crate::infer::Types;
 use crate::source::SourceMap;
 use std::collections::BTreeMap;
 
@@ -22,6 +24,10 @@ pub struct Ctx<'a> {
     /// Ordered, so a check that iterates files does so deterministically even
     /// before findings are sorted.
     pub asts: &'a BTreeMap<FileId, Ast>,
+    pub types: &'a Types,
+    /// C3e: how many lines a scope must span before an uninformative name in
+    /// it is worth mentioning. Short names in short scopes are good style.
+    pub scope_threshold: u32,
 }
 
 pub trait Check {
@@ -33,6 +39,10 @@ pub fn all() -> Vec<Box<dyn Check>> {
     vec![
         Box::new(c1_unawaited::UnawaitedCall),
         Box::new(c2_blocking::BlockingCall),
+        Box::new(c3_names::BooleanName),
+        Box::new(c3_names::QuantityName),
+        Box::new(c3_names::UninformativeName),
+        Box::new(c3_names::OverloadedName),
     ]
 }
 

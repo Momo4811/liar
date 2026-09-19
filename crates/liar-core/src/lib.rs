@@ -15,7 +15,7 @@ pub mod messages;
 pub mod source;
 pub mod span;
 
-pub use analysis::analyse;
+pub use analysis::{Settings, analyse, analyse_with};
 pub use ast::{
     Ast, ConstantKind, Expr, ExprId, ImportAlias, Param, ParseError, Stmt, StmtId, parse,
 };
@@ -27,7 +27,7 @@ pub use ids::{Arena, FileId, Id, NodeId};
 pub use index::{
     Binding, BindingKind, FileIndex, Index, IndexInput, Resolved, ScopeId, ScopeKind, ScopeTree,
 };
-pub use infer::Ty;
+pub use infer::{Ty, Types};
 pub use messages::{MessageTable, Tone};
 pub use source::{Position, SourceFile, SourceMap};
 pub use span::Span;
