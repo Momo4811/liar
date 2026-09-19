@@ -1,0 +1,28 @@
+---
+source: crates/liar-core/src/cfg/build.rs
+assertion_line: 504
+expression: cfg.to_dot(name)
+---
+digraph try_except {
+  node [shape=box];
+  b0 [label="entry"];
+  b1 [label="exit: return"];
+  b2 [label="exit: raised"];
+  b3 [label="b3"];
+  b4 [label="b4 (1 stmts)"];
+  b5 [label="b5 (1 stmts)"];
+  b6 [label="b6"];
+  b7 [label="b7"];
+  b8 [label="b8"];
+  b9 [label="b9"];
+  b0 -> b5;
+  b5 -> b4 [style=dashed, color=gray, label="raises"];
+  b5 -> b6;
+  b6 -> b7;
+  b7 -> b3;
+  b4 -> b2 [style=dashed, color=gray, label="raises"];
+  b4 -> b8;
+  b8 -> b3;
+  b3 -> b9;
+  b9 -> b1;
+}

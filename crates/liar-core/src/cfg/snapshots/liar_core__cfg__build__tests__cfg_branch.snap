@@ -1,0 +1,19 @@
+---
+source: crates/liar-core/src/cfg/build.rs
+assertion_line: 504
+expression: cfg.to_dot(name)
+---
+digraph branch {
+  node [shape=box];
+  b0 [label="entry"];
+  b1 [label="exit: return"];
+  b2 [label="exit: raised"];
+  b3 [label="b3 (1 stmts)"];
+  b4 [label="b4 (1 stmts)"];
+  b5 [label="b5"];
+  b0 -> b3;
+  b0 -> b4;
+  b3 -> b5;
+  b4 -> b5;
+  b5 -> b1;
+}

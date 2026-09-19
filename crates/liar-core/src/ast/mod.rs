@@ -206,6 +206,13 @@ pub enum Expr {
         elements: Vec<ExprId>,
         span: Span,
     },
+    /// `(a, b)`. Modelled because names hide in tuples - a handle returned as
+    /// part of one is still a handle leaving the function, and an unmodelled
+    /// expression is one the analysis cannot see into.
+    Tuple {
+        elements: Vec<ExprId>,
+        span: Span,
+    },
     /// `value[index]`. Only the base matters here: `list[int]` is a list, and
     /// the element type is not tracked because nothing needs it.
     Subscript {
@@ -242,6 +249,7 @@ impl Expr {
             | Expr::Await { span, .. }
             | Expr::Constant { span, .. }
             | Expr::List { span, .. }
+            | Expr::Tuple { span, .. }
             | Expr::Subscript { span, .. }
             | Expr::Dict { span }
             | Expr::Unsupported { span } => *span,
@@ -359,7 +367,7 @@ impl Ast {
                 out.extend(keywords.iter().map(|(_, value)| *value));
                 out
             }
-            Expr::List { elements, .. } => elements.clone(),
+            Expr::List { elements, .. } | Expr::Tuple { elements, .. } => elements.clone(),
             Expr::Subscript { value, index, .. } => vec![*value, *index],
             Expr::Name { .. }
             | Expr::Constant { .. }

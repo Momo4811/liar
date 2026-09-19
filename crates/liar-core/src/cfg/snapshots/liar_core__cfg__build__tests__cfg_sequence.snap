@@ -1,0 +1,12 @@
+---
+source: crates/liar-core/src/cfg/build.rs
+assertion_line: 504
+expression: cfg.to_dot(name)
+---
+digraph sequence {
+  node [shape=box];
+  b0 [label="entry"];
+  b1 [label="exit: return"];
+  b2 [label="exit: raised"];
+  b0 -> b1;
+}

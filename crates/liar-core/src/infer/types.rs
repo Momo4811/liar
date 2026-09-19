@@ -242,6 +242,7 @@ impl Types {
             },
 
             Expr::List { .. } => Ty::List,
+            Expr::Tuple { .. } => Ty::Tuple,
             Expr::Dict { .. } => Ty::Dict,
 
             Expr::Name { name, .. } => {

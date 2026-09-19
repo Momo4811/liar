@@ -1,0 +1,24 @@
+# Things that must be released, and what releases them.
+#
+# Keyed on the resolved dotted path of the acquiring call, so `open` matches the
+# builtin and `socket.socket` matches however the module was imported.
+#
+# Kept short on purpose. Every entry is something whose leak is a real
+# operating-system resource - a file descriptor, a socket, a lock - not merely
+# an object that would like to be tidied up. Garbage collection handles the
+# rest eventually, and "eventually" is only a problem for the things here.
+
+[acquire]
+"open" = "close"
+"socket.socket" = "close"
+"socket.create_connection" = "close"
+"sqlite3.connect" = "close"
+"shelve.open" = "close"
+"tarfile.open" = "close"
+"zipfile.ZipFile" = "close"
+"tempfile.NamedTemporaryFile" = "close"
+"tempfile.TemporaryFile" = "close"
+"urllib.request.urlopen" = "close"
+"threading.Lock" = "release"
+"threading.RLock" = "release"
+"multiprocessing.Pool" = "close"

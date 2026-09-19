@@ -1,0 +1,27 @@
+---
+source: crates/liar-core/src/cfg/build.rs
+assertion_line: 504
+expression: cfg.to_dot(name)
+---
+digraph try_finally {
+  node [shape=box];
+  b0 [label="entry"];
+  b1 [label="exit: return"];
+  b2 [label="exit: raised"];
+  b3 [label="b3 (1 stmts)"];
+  b4 [label="b4 (1 stmts)"];
+  b5 [label="b5"];
+  b6 [label="b6"];
+  b7 [label="b7"];
+  b8 [label="b8"];
+  b0 -> b4;
+  b4 -> b3 [style=dashed, color=gray, label="raises"];
+  b4 -> b5;
+  b5 -> b6;
+  b6 -> b3;
+  b3 -> b2 [style=dashed, color=gray, label="raises"];
+  b3 -> b7;
+  b7 -> b2 [style=dashed, color=gray, label="raises"];
+  b7 -> b8;
+  b8 -> b1;
+}

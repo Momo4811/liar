@@ -4,6 +4,7 @@
 
 pub mod analysis;
 pub mod ast;
+pub mod cfg;
 pub mod check;
 pub mod checks;
 pub mod finding;
@@ -19,6 +20,7 @@ pub use analysis::{Settings, analyse, analyse_with};
 pub use ast::{
     Ast, ConstantKind, Expr, ExprId, ImportAlias, Param, ParseError, Stmt, StmtId, parse,
 };
+pub use cfg::{Cfg, Edge};
 pub use check::{CheckId, Severity};
 pub use checks::{Check, Ctx};
 pub use finding::{Finding, Label, sort_findings};

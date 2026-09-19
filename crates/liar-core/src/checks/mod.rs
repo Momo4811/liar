@@ -7,6 +7,7 @@
 pub mod c1_unawaited;
 pub mod c2_blocking;
 pub mod c3_names;
+pub mod c4_leak;
 
 use crate::ast::Ast;
 use crate::check::CheckId;
@@ -43,6 +44,7 @@ pub fn all() -> Vec<Box<dyn Check>> {
         Box::new(c3_names::QuantityName),
         Box::new(c3_names::UninformativeName),
         Box::new(c3_names::OverloadedName),
+        Box::new(c4_leak::ResourceLeak),
     ]
 }
 

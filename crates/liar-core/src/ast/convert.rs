@@ -424,6 +424,14 @@ fn convert_expr(ast: &mut Ast, expr: &py::Expr) -> ExprId {
             }
         }
 
+        py::Expr::Tuple(node) => {
+            let elements = node.elts.iter().map(|e| convert_expr(ast, e)).collect();
+            Expr::Tuple {
+                elements,
+                span: span(node.range),
+            }
+        }
+
         py::Expr::Subscript(node) => {
             let value = convert_expr(ast, &node.value);
             let index = convert_expr(ast, &node.slice);

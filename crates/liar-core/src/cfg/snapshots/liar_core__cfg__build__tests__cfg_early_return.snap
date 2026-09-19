@@ -1,0 +1,23 @@
+---
+source: crates/liar-core/src/cfg/build.rs
+assertion_line: 504
+expression: cfg.to_dot(name)
+---
+digraph early_return {
+  node [shape=box];
+  b0 [label="entry"];
+  b1 [label="exit: return"];
+  b2 [label="exit: raised"];
+  b3 [label="b3 (1 stmts)"];
+  b4 [label="b4"];
+  b5 [label="b5"];
+  b6 [label="b6 (1 stmts)"];
+  b7 [label="b7"];
+  b0 -> b3;
+  b3 -> b1;
+  b0 -> b5;
+  b4 -> b6;
+  b5 -> b6;
+  b6 -> b1;
+  b7 -> b1;
+}
