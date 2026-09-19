@@ -311,6 +311,82 @@ rate somebody might actually work through — unlike C3e's one per twelve.
 
 ---
 
+## Run 4 — 2026-09-19 — docstrings
+
+**Findings:** 1,403 on the first pass, from C5 alone. Four rounds took it to
+**39**, and the total across every check to 201.
+
+| | first pass | now |
+|---|---|---|
+| C5 | **1,403** | **39** |
+| everything else | 161 | 162 |
+
+### ❌ A Google section ended only at indentation zero
+
+```
+    Args:
+        url: where from
+
+    Returns:              <- read as a parameter named "Returns"
+        the body
+
+    Raises:               <- and one named "Raises"
+        ClientError: ...  <- and one named "ClientError"
+```
+
+A docstring inside a function is itself indented, so the next section header
+sits at the same depth as `Args:` and not at zero. Over a thousand findings
+from one comparison.
+
+**Every fixture used unindented text**, which is why none of them caught it.
+That is the more useful lesson: a fixture that does not look like the real
+thing tests something adjacent to the real thing.
+
+### ❌ Continuation lines were read as entries
+
+```
+    Args:
+        host: the host to bind
+            Default: localhost        <- "Default" is not a parameter
+```
+
+A description line containing a colon looks exactly like an entry. Entries sit
+at a single depth; anything deeper is prose.
+
+### ❌ 135 functions "promising a return" that were not
+
+A generator, whose `yield` the engine does not model. An abstract method that
+raises. A stub. All of them have no `return` statement, and all of them infer
+`None`.
+
+The claim now requires the function to actually have a `return`. That costs the
+case where a docstring promises a value and the body simply never returns — the
+honest price of only reporting what can be checked.
+
+### ❌ `**options` is a catch-all and is not called `kwargs`
+
+```python
+def websocket(self, rule: str, **options: Any) -> ...:      # quart/app.py
+    """
+    Arguments:
+        rule: ...
+        endpoint: ...        <- goes into **options
+        defaults: ...
+```
+
+Exactly what the catch-all rule was for, and it matched on the parameter being
+*called* `kwargs` or `args`. The parser has always known which parameter is
+starred; the syntax tree simply was not keeping it. It does now.
+
+### Where it landed
+
+39 findings across 1,305 files, roughly one per thirty-three. Fifteen are the
+return claim and the rest are parameters that no longer exist, which is the
+highest-value shape this check has: almost always a rename that missed the
+docstring.
+
+---
+
 ## On recall
 
 Recall is not reported here, and will not be. There is no way to know which

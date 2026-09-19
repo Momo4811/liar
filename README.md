@@ -47,6 +47,7 @@ found and fixed, is in [`corpus/triage.md`](corpus/triage.md).
 | **C3e** | A name that says nothing, over a scope long enough to matter |
 | **C3f** | One name meaning several unrelated things |
 | **C4** | A resource not released on every path out — *including the invisible ones* |
+| **C5** | A docstring the code disagrees with |
 
 ```
 warning[C3f]: 4 variables called 'payload' in this file. none are related.
@@ -87,7 +88,8 @@ responsible. Catching it needs a real control flow graph with **exception
 edges** — the admission that almost every statement in Python has an invisible
 edge leaving it — which is why other linters don't.
 
-Planned: docstrings the code disagrees with.
+Every check is off-switchable per project, and none of them fire on anything
+the engine is unsure about.
 
 ## The rule the whole thing hangs on
 
@@ -98,18 +100,28 @@ accuracy gets muted; at 90% it gets read. So every ambiguity resolves toward
 saying nothing — an unresolvable name, an unrecognised decorator, a value whose
 type can't be known. It misses real bugs this way, deliberately.
 
-The test suite is shaped by that: **60 negative fixtures against 32 positive
+The test suite is shaped by that: **76 negative fixtures against 37 positive
 ones**. Tests asserting a bug is found measure recall. False positives are the
 only thing that can kill a linter, so most of the suite asserts that it
 correctly says *nothing*.
 
 Most of those negative fixtures were not imagined — they were minimised from
-real code that the tool got wrong. Pointing the C3 checks at 1,305 files
-produced **887 findings**, which is wallpaper rather than a linter. Four rounds
-of triage took it to 140, and every false positive along the way became a
-permanent fixture first, so none can come back. The whole account, including
-the two that are still wrong and why they are not fixed, is in
-[`corpus/triage.md`](corpus/triage.md).
+real code that the tool got wrong. Each new check's first run against 1,305
+files of real packages went the same way:
+
+| | first run | after triage |
+|---|---|---|
+| C3 — the naming checks | 887 | 140 |
+| C5 — docstrings | 1,403 | 39 |
+
+Every false positive became a permanent fixture *before* it was fixed, so none
+can come back. The whole account — including the ones still wrong and why they
+are not fixed — is in [`corpus/triage.md`](corpus/triage.md).
+
+The most useful thing the corpus taught was about the tests. C5's Google-style
+parser ended a section at indentation zero, and **every fixture used unindented
+text**, so nothing caught it until real code did. A fixture that does not look
+like the real thing tests something adjacent to the real thing.
 
 Places it is deliberately blind, each with a fixture proving it:
 
@@ -223,7 +235,7 @@ Everything is arena-allocated and referenced by typed integer index — the way
 ## Tests
 
 ```bash
-cargo test        # 339 tests
+cargo test        # 371 tests
 ```
 
 Fixtures declare their expectations inline, and **an unexpected finding fails as
@@ -244,12 +256,13 @@ taught it and no false positive can return.
 
 ## Status
 
-Working: the engine, the index, type inference, control flow graphs with
-exception edges, a dataflow solver, C1, C2, four of the C3 family, C4, the
-corpus, the CLI, the language server and the VS Code extension.
+All eight checks work, along with the engine they sit on: the index, type
+inference, control flow graphs with exception edges, a dataflow solver, the
+corpus tooling, the CLI, the language server and the VS Code extension.
 
-Next: C5 — docstrings the code disagrees with — and a screen recording, which
-is the one artifact a reader would judge this on that isn't here yet.
+Not here yet: a screen recording of the extension in use. The protocol layer is
+verified end to end in CI, but nobody has watched it work, and that GIF is
+probably the single highest-value thing left.
 
 **C3e is the weakest thing here and it is worth saying so.** It has no
 correctness content: it is a style opinion about uninformative names, and a
