@@ -57,6 +57,20 @@ impl Names {
 
     fn reads_as_quantity(&self, name: &str) -> bool {
         let name = name.trim_start_matches('_');
+
+        // A name that asks a question is a question, whatever it ends with.
+        // `should_remove_content_length` and `is_exceeds_max_size` are
+        // booleans, and the quantity suffix on the end of them means nothing.
+        if self.reads_as_boolean(name) {
+            return false;
+        }
+
+        // A compound name honestly describes a compound value, and a suffix
+        // rule cannot see that. `list_and_count` really does hold both.
+        if name.contains("_and_") {
+            return false;
+        }
+
         self.quantity_exact.iter().any(|exact| name == exact)
             || self
                 .quantity_prefixes
@@ -72,18 +86,33 @@ impl Names {
         if self.allowed_short.iter().any(|allowed| name == allowed) {
             return false;
         }
+        // A short uppercase name is the TypeVar convention - T, P, KT, AnyStr.
+        // Eighty-one findings in the first corpus scan were TypeVars.
+        if name.chars().all(|c| c.is_uppercase() || c == '_') {
+            return false;
+        }
+        // Single letters are not flagged at all. In a short scope they are
+        // idiomatic; in a long one they are usually a parameter whose name is
+        // part of an interface the author did not choose - readinto(self, b)
+        // is the standard library's own signature. The damning case is a word
+        // that pretends to mean something and does not.
         self.uninformative.iter().any(|dull| name == dull)
-            || (name.chars().count() == 1 && name != "_")
     }
 }
 
 /// Whether a check is allowed to judge this type.
 ///
-/// Only builtins. An instance of a project class can implement `__bool__`,
-/// `__len__` or `__int__`, so a name like `is_valid` holding one may well be
-/// telling the truth, and this tool has no way to know.
+/// Only builtins, and never `None`.
+///
+/// An instance of a project class can implement `__bool__`, `__len__` or
+/// `__int__`, so a name like `is_valid` holding one may well be telling the
+/// truth, and this tool has no way to know.
+///
+/// `None` is excluded because it is a legitimate initial value for absolutely
+/// anything. `should_terminate = None` is a flag being set up, not a name
+/// lying about what it holds.
 fn judgeable(ty: &Ty) -> bool {
-    ty.is_known() && !matches!(ty, Ty::Instance(_))
+    ty.is_known() && !matches!(ty, Ty::Instance(_) | Ty::NoneType)
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +156,15 @@ impl Check for QuantityName {
         let mut findings = Vec::new();
 
         for_each_name(ctx, &mut |file, _scope, name, span, ty| {
+            // A boolean is never a broken promise about a number. A quantity
+            // word attached to one is almost always a verb phrase describing
+            // an action - prepend_size, populate_content_length,
+            // automatically_set_content_length were all reported wrongly
+            // before this. The cost is that count = True goes unmentioned,
+            // which is a rarer mistake than the ones this prevents.
+            if ty.is_bool() {
+                return;
+            }
             if names.reads_as_quantity(name) && judgeable(&ty) && !ty.is_numeric() {
                 findings.push(
                     Finding::new(CheckId::C3b, file, span)
@@ -271,9 +309,13 @@ fn scope_lines(ctx: &Ctx<'_>, file: FileId, scope: ScopeId) -> u32 {
     end.saturating_sub(start) + 1
 }
 
+/// What a name visitor is handed: which file and scope, the name, where it was
+/// written, and its type.
+type NameVisitor<'a> = dyn FnMut(FileId, ScopeId, &str, Span, Ty) + 'a;
+
 /// Calls `visit` for every named thing with a type: each function's return, and
 /// each variable binding.
-fn for_each_name(ctx: &Ctx<'_>, visit: &mut dyn FnMut(FileId, ScopeId, &str, Span, Ty)) {
+fn for_each_name(ctx: &Ctx<'_>, visit: &mut NameVisitor<'_>) {
     for (&file, ast) in ctx.asts {
         let Some(file_index) = ctx.index.file(file) else {
             continue;
@@ -297,8 +339,17 @@ fn for_each_name(ctx: &Ctx<'_>, visit: &mut dyn FnMut(FileId, ScopeId, &str, Spa
             if !decorators.is_empty() {
                 continue;
             }
-            let scope = file_index.scope_of(stmt);
+
             let ty = ctx.types.return_ty((file, *name_span));
+
+            // A function returning None is a procedure, and its name describes
+            // what it does rather than what it holds. `verify_content_length()`
+            // is a verb phrase, not a broken promise about a number.
+            if ty == Ty::NoneType {
+                continue;
+            }
+
+            let scope = file_index.scope_of(stmt);
             visit(file, scope, name, *name_span, ty);
         }
 
@@ -345,6 +396,43 @@ mod tests {
     }
 
     #[test]
+    fn a_question_is_never_a_quantity() {
+        // Minimised from the corpus: all four of these were reported as
+        // quantities that are not numbers, and all four are booleans.
+        let names = Names::embedded();
+        for name in [
+            "should_remove_content_length",
+            "is_exceeds_max_size",
+            "has_total",
+            "can_num_retry",
+        ] {
+            assert!(
+                names.reads_as_boolean(name),
+                "{name} should read as a question"
+            );
+            assert!(
+                !names.reads_as_quantity(name),
+                "{name} should not be a quantity"
+            );
+        }
+    }
+
+    #[test]
+    fn a_compound_name_is_not_a_quantity() {
+        // `list_and_count` holding a tuple is honest.
+        let names = Names::embedded();
+        assert!(!names.reads_as_quantity("list_and_count"));
+        assert!(!names.reads_as_quantity("name_and_size"));
+        assert!(names.reads_as_quantity("item_count"));
+    }
+
+    #[test]
+    fn none_is_never_judged() {
+        // A legitimate initial value for anything.
+        assert!(!judgeable(&Ty::NoneType));
+    }
+
+    #[test]
     fn quantity_names_are_recognised() {
         let names = Names::embedded();
         for name in ["count", "num_items", "n_rows", "item_count", "buffer_size"] {
@@ -358,13 +446,29 @@ mod tests {
     }
 
     #[test]
-    fn idiomatic_short_names_are_not_uninformative() {
+    fn only_words_that_pretend_to_mean_something_are_uninformative() {
         let names = Names::embedded();
-        for name in ["i", "j", "k", "n", "_", "x"] {
+
+        // Single letters are never flagged. In a short scope they are
+        // idiomatic; in a long one they are usually a parameter whose name is
+        // part of an interface the author did not choose.
+        for name in ["i", "j", "k", "n", "_", "x", "b", "q", "w"] {
             assert!(!names.is_uninformative(name), "{name}");
         }
-        for name in ["data", "temp", "q", "w"] {
+
+        // Short uppercase names are the TypeVar convention.
+        for name in ["T", "P", "KT", "AnyStr"] {
+            assert!(!names.is_uninformative(name), "{name}");
+        }
+
+        // A word that promises meaning and delivers none.
+        for name in ["data", "temp", "result", "value", "obj"] {
             assert!(names.is_uninformative(name), "{name}");
+        }
+
+        // A name that says what it holds.
+        for name in ["parsed_records", "user", "retry_count"] {
+            assert!(!names.is_uninformative(name), "{name}");
         }
     }
 

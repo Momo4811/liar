@@ -51,7 +51,11 @@ pub struct ImportAlias {
 pub struct Param {
     pub name: String,
     pub annotation: Option<ExprId>,
+    /// The whole parameter, annotation and default included.
     pub span: Span,
+    /// The name alone. A diagnostic about a parameter's name must underline
+    /// the name, not `b: bytearray`.
+    pub name_span: Span,
 }
 
 #[derive(Clone, PartialEq, Debug)]

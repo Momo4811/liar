@@ -42,9 +42,30 @@ found and fixed, is in [`corpus/triage.md`](corpus/triage.md).
 |---|---|
 | **C1** | An async function called without `await` |
 | **C2** | A blocking call inside async code, directly or through a sync helper |
+| **C3a** | A name that asks a question whose answer is not a boolean |
+| **C3b** | A name that promises a number and holds something else |
+| **C3e** | A name that says nothing, over a scope long enough to matter |
+| **C3f** | One name meaning several unrelated things |
 
-Planned: names that contradict their types (`def is_ready() -> str`), resources
-not released on every path out, and docstrings the code disagrees with.
+```
+warning[C3f]: 4 variables called 'payload' in this file. none are related.
+ --> handlers.py:1:1
+  |
+1 | payload = 1
+  | ^^^^^^^
+2 | payload = "x"
+  | ------- str
+3 | payload = []
+  | ------- list
+4 | payload = {}
+  | ------- dict
+```
+
+One finding with a label per occurrence, not four findings — the complaint is
+about the group.
+
+Planned: resources not released on every path out, and docstrings the code
+disagrees with.
 
 ## The rule the whole thing hangs on
 
@@ -55,10 +76,18 @@ accuracy gets muted; at 90% it gets read. So every ambiguity resolves toward
 saying nothing — an unresolvable name, an unrecognised decorator, a value whose
 type can't be known. It misses real bugs this way, deliberately.
 
-The test suite is shaped by that: **27 negative fixtures against 15 positive
+The test suite is shaped by that: **49 negative fixtures against 26 positive
 ones**. Tests asserting a bug is found measure recall. False positives are the
 only thing that can kill a linter, so most of the suite asserts that it
 correctly says *nothing*.
+
+Most of those negative fixtures were not imagined — they were minimised from
+real code that the tool got wrong. Pointing the C3 checks at 1,305 files
+produced **887 findings**, which is wallpaper rather than a linter. Four rounds
+of triage took it to 140, and every false positive along the way became a
+permanent fixture first, so none can come back. The whole account, including
+the two that are still wrong and why they are not fixed, is in
+[`corpus/triage.md`](corpus/triage.md).
 
 Places it is deliberately blind, each with a fixture proving it:
 
@@ -67,6 +96,11 @@ Places it is deliberately blind, each with a fixture proving it:
 - any decorated definition — `@gen_test` can turn a coroutine function into a
   synchronous one, and then the un-awaited call is correct
 - a coroutine assigned to a name that is used again for anything at all
+- an instance of any class, for the naming checks — a class can implement
+  `__bool__` or `__len__`, so `is_valid` holding one may be telling the truth
+- a `None` initialiser, which is a legitimate starting value for anything
+- a boolean under a quantity name, because `prepend_size = True` is a verb
+  phrase and not a broken promise about a number
 
 **Recall is not reported, and won't be.** There's no way to know which bugs were
 missed without a labelled ground truth that doesn't exist. Inventing a recall
@@ -167,7 +201,7 @@ Everything is arena-allocated and referenced by typed integer index — the way
 ## Tests
 
 ```bash
-cargo test        # 263 tests
+cargo test        # 316 tests
 ```
 
 Fixtures declare their expectations inline, and **an unexpected finding fails as
@@ -188,12 +222,17 @@ taught it and no false positive can return.
 
 ## Status
 
-Working: the engine, the index, C1 and C2, the corpus, the CLI, the language
-server and the VS Code extension.
+Working: the engine, the index, type inference, C1, C2 and four of the C3
+family, the corpus, the CLI, the language server and the VS Code extension.
 
-Next: type inference and the checks that need it — names that contradict their
-types, resources not released on every path out, and docstrings the code
-disagrees with.
+Next: control flow graphs with exception edges, and the resource that leaks when
+something goes wrong — the technically deepest check in the plan.
+
+**C3e is the weakest thing here and it is worth saying so.** It has no
+correctness content: it is a style opinion about uninformative names, and a
+defensible one, but a team that disagrees should turn it off with
+`ignore = ["C3e"]`. Everything else in the tool is about code that does not do
+what it says.
 
 Not yet done: the extension has been driven through a real LSP handshake by
 `scripts/lsp-smoke.py`, which runs in CI, but it has not been exercised by hand

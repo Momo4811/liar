@@ -1,6 +1,10 @@
+# Long enough to cross the threshold, so this is the exemption being tested
+# rather than the scope length.
 def process(rows):
     i = 0
     n = len(rows)
+    line_1 = 1
+    line_2 = 2
     line_3 = 3
     line_4 = 4
     line_5 = 5
@@ -20,4 +24,53 @@ def process(rows):
     line_19 = 19
     line_20 = 20
     line_21 = 21
+    line_22 = 22
+    line_23 = 23
+    line_24 = 24
+    line_25 = 25
+    line_26 = 26
+    line_27 = 27
+    line_28 = 28
+    line_29 = 29
+    line_30 = 30
+    line_31 = 31
+    line_32 = 32
+    line_33 = 33
+    line_34 = 34
+    line_35 = 35
+    line_36 = 36
+    line_37 = 37
+    line_38 = 38
+    line_39 = 39
+    line_40 = 40
+    line_41 = 41
+    line_42 = 42
+    line_43 = 43
+    line_44 = 44
+    line_45 = 45
+    line_46 = 46
+    line_47 = 47
+    line_48 = 48
+    line_49 = 49
+    line_50 = 50
+    line_51 = 51
+    line_52 = 52
+    line_53 = 53
+    line_54 = 54
+    line_55 = 55
+    line_56 = 56
+    line_57 = 57
+    line_58 = 58
+    line_59 = 59
+    line_60 = 60
+    line_61 = 61
+    line_62 = 62
+    line_63 = 63
+    line_64 = 64
+    line_65 = 65
+    line_66 = 66
+    line_67 = 67
+    line_68 = 68
+    line_69 = 69
+    line_70 = 70
     return i + n

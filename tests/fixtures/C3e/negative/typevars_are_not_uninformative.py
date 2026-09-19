@@ -1,6 +1,13 @@
-# A name that says what it holds is fine at any length.
-def process(rows):
-    parsed_records = rows
+# Minimised from the first corpus scan, where 81 of 799 C3e findings were
+# TypeVars. A short uppercase name is the convention, not a lapse.
+from typing import TypeVar
+
+T = TypeVar("T")
+P = TypeVar("P")
+KT = TypeVar("KT")
+
+
+def identity(subject: T) -> T:
     line_1 = 1
     line_2 = 2
     line_3 = 3
@@ -71,4 +78,4 @@ def process(rows):
     line_68 = 68
     line_69 = 69
     line_70 = 70
-    return parsed_records
+    return subject

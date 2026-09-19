@@ -56,6 +56,7 @@ fn convert_params(ast: &mut Ast, parameters: &py::Parameters) -> Vec<Param> {
             name: p.name.id.to_string(),
             annotation,
             span: span(p.range),
+            name_span: span(p.name.range),
         });
     };
 

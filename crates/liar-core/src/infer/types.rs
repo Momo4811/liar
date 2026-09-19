@@ -146,7 +146,7 @@ impl Types {
                             found
                                 .entry((file, body, param.name.clone()))
                                 .or_default()
-                                .push((param.span, ty));
+                                .push((param.name_span, ty));
                         }
                     }
 

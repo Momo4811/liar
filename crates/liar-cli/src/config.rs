@@ -49,7 +49,7 @@ impl Default for Config {
             tone: Tone::Dry,
             enabled: CheckId::ALL.to_vec(),
             exclude: Vec::new(),
-            scope_threshold: 20,
+            scope_threshold: 60,
         }
     }
 }
@@ -191,7 +191,7 @@ mod tests {
     fn the_scope_threshold_is_configurable() {
         let config = Config::from_toml("scope-threshold = 40").unwrap();
         assert_eq!(config.scope_threshold, 40);
-        assert_eq!(Config::default().scope_threshold, 20);
+        assert_eq!(Config::default().scope_threshold, 60);
     }
 
     #[test]

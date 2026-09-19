@@ -122,7 +122,7 @@ fn walk(index: &mut FileIndex, ast: &Ast, stmts: &[StmtId], scope: ScopeId) {
                     index.scopes.bind(
                         inner,
                         param.name.clone(),
-                        Binding::new(BindingKind::Parameter, param.span),
+                        Binding::new(BindingKind::Parameter, param.name_span),
                     );
                 }
 

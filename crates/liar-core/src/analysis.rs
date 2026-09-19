@@ -26,8 +26,13 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
+        // Sixty, not twenty. At twenty the first corpus scan produced 799 C3e
+        // findings across 1,305 files - roughly one per two files. They were
+        // not wrong; data and value really do say nothing. But a check that
+        // fires eight hundred times gets muted exactly as fast as one that is
+        // wrong, and a muted check finds nothing at all.
         Self {
-            scope_threshold: 20,
+            scope_threshold: 60,
         }
     }
 }

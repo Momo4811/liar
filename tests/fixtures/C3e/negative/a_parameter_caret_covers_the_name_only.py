@@ -1,6 +1,8 @@
-# A name that says what it holds is fine at any length.
-def process(rows):
-    parsed_records = rows
+# Minimised from aiobotocore/response.py. The caret used to cover
+# "b: bytearray" rather than "b", because a parameter carried only one span.
+#
+# `b` is also exempt as a short name, so this file must produce nothing at all.
+def readinto(self, b: bytearray) -> int:
     line_1 = 1
     line_2 = 2
     line_3 = 3
@@ -71,4 +73,4 @@ def process(rows):
     line_68 = 68
     line_69 = 69
     line_70 = 70
-    return parsed_records
+    return 0
