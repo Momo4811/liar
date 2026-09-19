@@ -3,6 +3,10 @@
 //! Codes are public API the moment anyone writes `# liar: ignore[C1]` in their
 //! source. They never change meaning; a retired check's code is retired with
 //! it.
+//!
+//! Every code here fires. C3c and C3d were designed and cut, and they are not
+//! listed: a code that can never produce a finding is one a project can select
+//! and then wait for forever.
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Severity {
@@ -22,10 +26,6 @@ pub enum CheckId {
     C3a,
     /// A quantity-shaped name whose type is not numeric.
     C3b,
-    /// A plural name holding a scalar, or a singular name holding a collection.
-    C3c,
-    /// A `get_*` function that mutates state.
-    C3d,
     /// A meaningless name in a scope large enough to matter.
     C3e,
     /// One name bound to several unrelated meanings in a file.
@@ -42,8 +42,6 @@ impl CheckId {
         CheckId::C2,
         CheckId::C3a,
         CheckId::C3b,
-        CheckId::C3c,
-        CheckId::C3d,
         CheckId::C3e,
         CheckId::C3f,
         CheckId::C4,
@@ -56,8 +54,6 @@ impl CheckId {
             CheckId::C2 => "C2",
             CheckId::C3a => "C3a",
             CheckId::C3b => "C3b",
-            CheckId::C3c => "C3c",
-            CheckId::C3d => "C3d",
             CheckId::C3e => "C3e",
             CheckId::C3f => "C3f",
             CheckId::C4 => "C4",
@@ -109,7 +105,7 @@ mod tests {
         // ALL is hand-written, so it can drift from the enum. Comparing
         // against an expected count means adding a variant without adding it
         // to ALL fails a test rather than silently disabling the check.
-        assert_eq!(CheckId::ALL.len(), 10);
+        assert_eq!(CheckId::ALL.len(), 8);
     }
 
     #[test]
@@ -120,10 +116,30 @@ mod tests {
     }
 
     #[test]
+    fn retired_codes_are_not_selectable() {
+        // C3c and C3d were designed and cut. Leaving them in the catalogue
+        // would let a project select a check that can never fire.
+        assert_eq!(CheckId::from_code("C3c"), None);
+        assert_eq!(CheckId::from_code("C3d"), None);
+    }
+
+    #[test]
+    fn every_code_belongs_to_a_check_that_runs() {
+        // The catalogue and the registry must agree, or a code is selectable
+        // and inert.
+        let running: Vec<CheckId> = crate::checks::all().iter().map(|c| c.id()).collect();
+        for &check in CheckId::ALL {
+            assert!(
+                running.contains(&check),
+                "{} is in the catalogue but no check produces it",
+                check.code()
+            );
+        }
+    }
+
+    #[test]
     fn the_spec_codes_are_present() {
-        for code in [
-            "C1", "C2", "C3a", "C3b", "C3c", "C3d", "C3e", "C3f", "C4", "C5",
-        ] {
+        for code in ["C1", "C2", "C3a", "C3b", "C3e", "C3f", "C4", "C5"] {
             assert!(CheckId::from_code(code).is_some(), "missing check {code}");
         }
     }

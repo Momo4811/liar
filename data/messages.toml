@@ -30,16 +30,6 @@ professional = "'{name}' is named as a quantity but its type is {ty}"
 dry          = "'{name}' is a {ty}. a count is a number."
 brutal       = "counting is done with numbers, not with a {ty}."
 
-[C3c]
-professional = "'{name}' is {name_number} but its value is {value_number}"
-dry          = "'{name}' is {name_number}. its value is {value_number}."
-brutal       = "pick one: is '{name}' {name_number} or {value_number}?"
-
-[C3d]
-professional = "'{name}' is named as an accessor but mutates {target}"
-dry          = "'{name}' says get. it writes to {target}."
-brutal       = "'{name}' is not getting anything. it is changing {target}."
-
 [C3e]
 professional = "'{name}' is uninformative across {lines} lines of scope"
 dry          = "'{name}' tells the reader nothing, for {lines} lines."

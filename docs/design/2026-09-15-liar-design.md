@@ -1,8 +1,8 @@
 # liar — a static analyser for code that lies
 
-**Status:** approved design, not yet implemented
+**Status:** built. Deviations from this design are recorded where they occur, and the cut list in §12 was used - see C3c and C3d in §5.
 **Date:** 2026-09-15
-**Working name:** `liar`. Provisional — renaming costs two minutes while the repo is empty and is painful later, so settle it before week 1.
+**Name:** `liar`. Settled.
 
 ---
 
@@ -150,8 +150,8 @@ carries the project's personality, and the one a reader will screenshot.
 |----|---------|---------|
 | C3a | Boolean-shaped name, non-boolean type | `def is_ready() -> str` |
 | C3b | Quantity-shaped name, non-numeric type | `count = []` |
-| C3c | Plural name holding a scalar, or singular holding a collection | `user = [a, b]` |
-| C3d | `get_*` that mutates state | `get_config()` writing `self.cache` |
+| ~~C3c~~ | *Cut.* Plural name holding a scalar, or singular holding a collection | `user = [a, b]` |
+| ~~C3d~~ | *Cut.* A `get_*` that mutates state | `get_config()` writing `self.cache` |
 | C3e | Meaningless name in a scope large enough to matter | `data` spanning 80 lines |
 | C3f | One name, several unrelated meanings in a file | four different `data`s |
 
@@ -161,6 +161,8 @@ types and to variables.
 
 **C3b** matches `count`, `*_count`, `num_*`, `n_*`, `*_size`, `length`, `total`,
 `*_index` against a type that is not `int` or `float`.
+
+**C3c and C3d were cut**, as §12's cut list anticipated. Four rounds of precision work were needed on the four C3 checks that were built, and adding two fiddlier heuristics would have made that worse rather than better. Their codes are retired with them, so neither can be selected. The original designs follow.
 
 **C3c** uses a crude English pluralisation rule and only fires on unambiguous
 cases — a plural name bound to a non-collection, or a singular name bound to
