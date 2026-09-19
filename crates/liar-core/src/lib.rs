@@ -10,6 +10,7 @@ pub mod finding;
 pub mod fixture;
 pub mod ids;
 pub mod index;
+pub mod infer;
 pub mod messages;
 pub mod source;
 pub mod span;
@@ -26,6 +27,7 @@ pub use ids::{Arena, FileId, Id, NodeId};
 pub use index::{
     Binding, BindingKind, FileIndex, Index, IndexInput, Resolved, ScopeId, ScopeKind, ScopeTree,
 };
+pub use infer::Ty;
 pub use messages::{MessageTable, Tone};
 pub use source::{Position, SourceFile, SourceMap};
 pub use span::Span;

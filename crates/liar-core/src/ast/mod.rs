@@ -202,6 +202,13 @@ pub enum Expr {
         elements: Vec<ExprId>,
         span: Span,
     },
+    /// `value[index]`. Only the base matters here: `list[int]` is a list, and
+    /// the element type is not tracked because nothing needs it.
+    Subscript {
+        value: ExprId,
+        index: ExprId,
+        span: Span,
+    },
     Dict {
         span: Span,
     },
@@ -231,6 +238,7 @@ impl Expr {
             | Expr::Await { span, .. }
             | Expr::Constant { span, .. }
             | Expr::List { span, .. }
+            | Expr::Subscript { span, .. }
             | Expr::Dict { span }
             | Expr::Unsupported { span } => *span,
         }
@@ -348,6 +356,7 @@ impl Ast {
                 out
             }
             Expr::List { elements, .. } => elements.clone(),
+            Expr::Subscript { value, index, .. } => vec![*value, *index],
             Expr::Name { .. }
             | Expr::Constant { .. }
             | Expr::Dict { .. }

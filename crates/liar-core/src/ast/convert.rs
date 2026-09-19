@@ -423,6 +423,16 @@ fn convert_expr(ast: &mut Ast, expr: &py::Expr) -> ExprId {
             }
         }
 
+        py::Expr::Subscript(node) => {
+            let value = convert_expr(ast, &node.value);
+            let index = convert_expr(ast, &node.slice);
+            Expr::Subscript {
+                value,
+                index,
+                span: span(node.range),
+            }
+        }
+
         py::Expr::Dict(node) => Expr::Dict {
             span: span(node.range),
         },
