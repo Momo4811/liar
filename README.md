@@ -2,6 +2,8 @@
 
 **A static analyser that finds Python code which says one thing and does another.**
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/Momo4811.liar?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=Momo4811.liar)
+
 ```
 error[C1]: 'save_user' is never awaited. this line does nothing.
  --> handlers.py:12:5
@@ -180,8 +182,7 @@ meant to fix.
 
 ```bash
 cargo install --git https://github.com/Momo4811/liar liar-lsp   # puts liar-lsp on PATH
-cd editors/vscode && npm install && npm run package             # builds liar-0.1.0.vsix
-code --install-extension liar-0.1.0.vsix
+code --install-extension Momo4811.liar                          # or search "liar" in Extensions
 ```
 
 Settings are `liar.enable`, `liar.tone` and `liar.path`. The extension is about
@@ -285,8 +286,7 @@ All eight checks work, along with the engine they sit on: the index, type
 inference, control flow graphs with exception edges, a dataflow solver, the
 corpus tooling, the CLI, the language server and the VS Code extension.
 
-Not yet done: the extension is not on the Marketplace. Until it is, install it
-from the `.vsix` as above, or download one from any CI run.
+The extension is on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Momo4811.liar).
 
 **C3e is the weakest thing here and it is worth saying so.** It has no
 correctness content: it is a style opinion about uninformative names, and a
