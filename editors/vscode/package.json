@@ -5,6 +5,15 @@
   "version": "0.1.0",
   "publisher": "Momo4811",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/Momo4811/liar#readme",
+  "bugs": {
+    "url": "https://github.com/Momo4811/liar/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Momo4811/liar"
@@ -65,9 +74,12 @@
     ]
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "vscode:prepublish": "npm run compile"
+    "check": "tsc -p ./ --noEmit",
+    "compile": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=out/extension.js --sourcemap",
+    "watch": "npm run compile -- --watch",
+    "vscode:prepublish": "npm run check && npm run compile -- --minify",
+    "package": "vsce package --no-dependencies",
+    "test": "npm run compile && node ./test/run.js"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
@@ -75,6 +87,9 @@
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.5.0"
   }
 }

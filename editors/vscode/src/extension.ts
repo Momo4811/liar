@@ -18,9 +18,28 @@ const BINARY = "liar-lsp";
 
 let client: LanguageClient | undefined;
 
+// One channel for the life of the extension. Creating it per start would add
+// another "liar" entry to the Output panel every time the tone changed.
+let output: vscode.OutputChannel | undefined;
+
+// Files the server is told about when they change on disk: liar.toml, because
+// it decides which files and checks are in force, and Python files created or
+// deleted outside the editor, because they change what resolves in their
+// neighbours. Created once and shared by every server started.
+let watchers: vscode.FileSystemWatcher[] = [];
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  output = vscode.window.createOutputChannel("liar");
+  context.subscriptions.push(output);
+
+  watchers = [
+    vscode.workspace.createFileSystemWatcher("**/liar.toml"),
+    vscode.workspace.createFileSystemWatcher("**/*.{py,pyi}"),
+  ];
+  context.subscriptions.push(...watchers);
+
   context.subscriptions.push(
-    vscode.commands.registerCommand("liar.restart", () => restart(context)),
+    vscode.commands.registerCommand("liar.restart", restart),
   );
 
   // A change of tone is applied by restarting the server, which reads it once
@@ -29,25 +48,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("liar")) {
-        await restart(context);
+        await restart();
       }
     }),
   );
 
-  await start(context);
+  await start();
 }
 
 export function deactivate(): Thenable<void> | undefined {
   return client?.stop();
 }
 
-async function restart(context: vscode.ExtensionContext): Promise<void> {
+async function restart(): Promise<void> {
   await client?.stop();
   client = undefined;
-  await start(context);
+  await start();
 }
 
-async function start(context: vscode.ExtensionContext): Promise<void> {
+async function start(): Promise<void> {
   const settings = vscode.workspace.getConfiguration("liar");
 
   if (!settings.get<boolean>("enable", true)) {
@@ -70,11 +89,11 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
     initializationOptions: {
       liar: { tone: settings.get<string>("tone", "dry") },
     },
-    outputChannel: vscode.window.createOutputChannel("liar"),
+    outputChannel: output,
+    synchronize: { fileEvents: watchers },
   };
 
   client = new LanguageClient("liar", "liar", serverOptions, clientOptions);
-  context.subscriptions.push({ dispose: () => void client?.stop() });
 
   try {
     await client.start();
@@ -118,7 +137,7 @@ function reportMissingBinary(): void {
     .then((choice) => {
       if (choice === build) {
         vscode.env.openExternal(
-          vscode.Uri.parse("https://github.com/Momo4811/liar#running-it"),
+          vscode.Uri.parse("https://github.com/Momo4811/liar/tree/main/editors/vscode#requirements"),
         );
       }
     });
