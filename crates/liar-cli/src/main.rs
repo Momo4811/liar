@@ -2,14 +2,13 @@
 
 #![forbid(unsafe_code)]
 
-mod config;
-mod discover;
 mod render;
 
 use clap::{Parser, Subcommand};
-use config::Config;
-use liar_core::analysis::analyse;
+use liar_core::analysis::analyse_with;
 use liar_core::ast::{Ast, Expr, parse};
+use liar_core::config::Config;
+use liar_core::discover;
 use liar_core::ids::FileId;
 use liar_core::index::{Index, IndexInput};
 use liar_core::messages::{MessageTable, Tone};
@@ -41,7 +40,7 @@ enum Commands {
         #[arg(long)]
         tone: Option<String>,
 
-        /// Path to liar.toml
+        /// Path to liar.toml. Defaults to liar.toml in the current directory
         #[arg(long)]
         config: Option<PathBuf>,
     },
@@ -229,7 +228,13 @@ fn check(
     tone: Option<String>,
     config: Option<PathBuf>,
 ) -> Result<bool, String> {
-    let mut settings = Config::load(config.as_deref()).map_err(|e| e.to_string())?;
+    // The same file the editor reads at the workspace root, so the two agree
+    // when liar is run from the project's root.
+    let mut settings = match config {
+        Some(path) => Config::load(Some(&path)),
+        None => Config::for_project(std::path::Path::new(".")),
+    }
+    .map_err(|e| e.to_string())?;
     if let Some(tone) = tone {
         settings.tone = tone.parse::<Tone>().map_err(|e| e.to_string())?;
     }
@@ -259,7 +264,7 @@ fn check(
 
     // Analysed as one project rather than file by file, so a name imported
     // from another file resolves to its real definition.
-    let mut findings = analyse(&sources, &asts);
+    let mut findings = analyse_with(&sources, &asts, &settings.settings());
 
     // Filtering here rather than inside each check means a disabled check
     // costs nothing to add and cannot leak a finding by forgetting to ask.

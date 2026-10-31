@@ -2,6 +2,7 @@
 
 use crate::workspace::Workspace;
 use liar_core::messages::Tone;
+use std::collections::HashSet;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
@@ -12,6 +13,13 @@ use tower_lsp::{Client, LanguageServer};
 pub struct Backend {
     client: Client,
     workspace: Mutex<Workspace>,
+    /// A configuration problem found during `initialize`, held until the
+    /// client is ready to show it.
+    pending_error: Mutex<Option<String>>,
+    /// Every file diagnostics were last published for. A file that leaves the
+    /// project - deleted, or newly excluded - must be cleared explicitly, or
+    /// its last findings stay on screen forever.
+    published: Mutex<HashSet<Url>>,
 }
 
 impl Backend {
@@ -19,7 +27,32 @@ impl Backend {
         Self {
             client,
             workspace: Mutex::new(Workspace::new(Tone::Dry)),
+            pending_error: Mutex::new(None),
+            published: Mutex::new(HashSet::new()),
         }
+    }
+
+    /// Tells the user their `liar.toml` was not applied, and why.
+    ///
+    /// Shown, not only logged: a configuration that is silently ignored is a
+    /// setting the user believes is in force.
+    async fn report_config_error(&self, error: impl std::fmt::Display) {
+        self.client
+            .show_message(
+                MessageType::WARNING,
+                format!("liar: {error}. Using the defaults until it is fixed."),
+            )
+            .await;
+    }
+
+    /// Records a file's text, if the file is part of the project.
+    async fn track(&self, path: &std::path::Path, text: String) -> bool {
+        let mut workspace = self.workspace.lock().await;
+        let accepted = workspace.accepts(path);
+        if accepted {
+            workspace.update(path, text);
+        }
+        accepted
     }
 
     /// Re-analyses the workspace and publishes diagnostics for every file.
@@ -47,6 +80,15 @@ impl Backend {
             }
         };
 
+        let mut published = self.published.lock().await;
+        let current: HashSet<Url> = diagnostics.keys().cloned().collect();
+        for gone in published.difference(&current) {
+            self.client
+                .publish_diagnostics(gone.clone(), Vec::new(), None)
+                .await;
+        }
+        *published = current;
+
         for (uri, items) in diagnostics {
             self.client.publish_diagnostics(uri, items, None).await;
         }
@@ -71,8 +113,10 @@ impl LanguageServer for Backend {
             self.workspace.lock().await.set_tone(tone);
         }
 
-        if let Some(root) = workspace_root(&params) {
-            self.workspace.lock().await.open(&root);
+        if let Some(root) = workspace_root(&params)
+            && let Err(error) = self.workspace.lock().await.open(&root)
+        {
+            *self.pending_error.lock().await = Some(error.to_string());
         }
 
         Ok(InitializeResult {
@@ -94,6 +138,9 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
+        if let Some(error) = self.pending_error.lock().await.take() {
+            self.report_config_error(error).await;
+        }
         let count = self.workspace.lock().await.len();
         self.client
             .log_message(MessageType::INFO, format!("liar: watching {count} files"))
@@ -102,11 +149,9 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path() {
-            self.workspace
-                .lock()
-                .await
-                .update(&path, params.text_document.text);
+        if let Ok(path) = params.text_document.uri.to_file_path()
+            && self.track(&path, params.text_document.text).await
+        {
             self.republish().await;
         }
     }
@@ -120,7 +165,7 @@ impl LanguageServer for Backend {
             return;
         };
         if let Some(change) = params.content_changes.into_iter().next_back() {
-            self.workspace.lock().await.update(&path, change.text);
+            self.track(&path, change.text).await;
         }
     }
 
@@ -132,10 +177,11 @@ impl LanguageServer for Backend {
         // configured. Falling back to the file on disk means the server is
         // correct either way.
         let text = params.text.or_else(|| std::fs::read_to_string(&path).ok());
-        if let Some(text) = text {
-            self.workspace.lock().await.update(&path, text);
+        if let Some(text) = text
+            && self.track(&path, text).await
+        {
+            self.republish().await;
         }
-        self.republish().await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -145,7 +191,42 @@ impl LanguageServer for Backend {
         if let Ok(path) = params.text_document.uri.to_file_path()
             && let Ok(text) = std::fs::read_to_string(&path)
         {
-            self.workspace.lock().await.update(&path, text);
+            self.track(&path, text).await;
+        }
+    }
+
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        let config_name = format!("/{}", liar_core::config::FILE_NAME);
+        let mut changed = false;
+
+        for change in &params.changes {
+            // Any change to liar.toml - created, edited, deleted - can change
+            // which files and checks are in force, so the project is re-read
+            // from scratch.
+            if change.uri.path().ends_with(&config_name) {
+                let reloaded = self.workspace.lock().await.reload();
+                if let Err(error) = reloaded {
+                    self.report_config_error(error).await;
+                }
+                changed = true;
+                continue;
+            }
+
+            // A Python file created or deleted outside the editor - a git
+            // checkout, a generator - changes what resolves in its neighbours.
+            let Ok(path) = change.uri.to_file_path() else {
+                continue;
+            };
+            if change.typ == FileChangeType::DELETED {
+                self.workspace.lock().await.forget(&path);
+                changed = true;
+            } else if let Ok(text) = std::fs::read_to_string(&path) {
+                changed |= self.track(&path, text).await;
+            }
+        }
+
+        if changed {
+            self.republish().await;
         }
     }
 
@@ -285,6 +366,34 @@ mod tests {
         };
 
         assert!(workspace_root(&params).is_some());
+    }
+
+    #[tokio::test]
+    async fn a_panic_in_analysis_does_not_take_the_server_down() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("a.py"),
+            "async def save():
+    pass
+
+
+async def handle():
+    save()
+",
+        )
+        .unwrap();
+
+        let (service, _socket) = tower_lsp::LspService::new(Backend::new);
+        let backend = service.inner();
+        backend.workspace.lock().await.open(dir.path()).unwrap();
+
+        backend.workspace.lock().await.panic_on_analysis = true;
+        backend.republish().await;
+
+        // Still alive, the lock is not poisoned, and the next save works.
+        let mut workspace = backend.workspace.lock().await;
+        workspace.panic_on_analysis = false;
+        assert_eq!(workspace.diagnostics().values().flatten().count(), 1);
     }
 
     #[test]

@@ -1,8 +1,10 @@
 //! One open project: its files, their text, and the findings in them.
 
 use crate::convert::{to_diagnostic, to_lsp_range, to_url};
-use liar_core::analysis::analyse;
+use liar_core::analysis::analyse_with;
 use liar_core::ast::{Ast, parse};
+use liar_core::config::{Config, ConfigError};
+use liar_core::discover::{DiscoverError, Filter, discover};
 use liar_core::ids::{FileId, Id};
 use liar_core::messages::{MessageTable, Tone};
 use liar_core::source::SourceMap;
@@ -23,6 +25,24 @@ use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Url};
 pub struct Workspace {
     texts: BTreeMap<PathBuf, String>,
     tone: Tone,
+    root: Option<PathBuf>,
+    /// The project's `liar.toml`. Its tone is not used: the tone is the
+    /// editor's setting, a personal preference rather than a project one.
+    config: Config,
+    filter: Filter,
+    /// Makes analysis panic, so the server's guard against it can be tested.
+    /// Compiled out of the real binary.
+    #[cfg(test)]
+    pub(crate) panic_on_analysis: bool,
+}
+
+/// Why a project's configuration could not be applied.
+#[derive(Debug, thiserror::Error)]
+pub enum OpenError {
+    #[error("liar.toml: {0}")]
+    Config(#[from] ConfigError),
+    #[error("liar.toml: {0}")]
+    Discover(#[from] DiscoverError),
 }
 
 impl Workspace {
@@ -30,15 +50,60 @@ impl Workspace {
         Self {
             texts: BTreeMap::new(),
             tone,
+            root: None,
+            config: Config::default(),
+            filter: Filter::new(&[]).expect("no patterns cannot be a bad pattern"),
+            #[cfg(test)]
+            panic_on_analysis: false,
         }
     }
 
-    /// Loads every Python file under `root`.
-    pub fn open(&mut self, root: &Path) {
-        for path in discover(root) {
+    /// Loads `root`'s configuration and every Python file it selects.
+    ///
+    /// The files are the ones `liar check` would analyse from the same root,
+    /// by the same code, so the editor and the command line cannot disagree.
+    /// A broken `liar.toml` is reported and the defaults are used: the user
+    /// still gets findings, and is told why they are not the ones configured.
+    pub fn open(&mut self, root: &Path) -> Result<(), OpenError> {
+        self.texts.clear();
+        self.root = Some(root.to_path_buf());
+
+        let configured = Config::for_project(root)
+            .map_err(OpenError::from)
+            .and_then(|config| Ok((Filter::new(&config.exclude)?, config)));
+        let (result, (filter, config)) = match configured {
+            Ok(applied) => (Ok(()), applied),
+            Err(error) => (Err(error), (Filter::new(&[])?, Config::default())),
+        };
+        self.filter = filter;
+
+        let files = discover(&[root.to_path_buf()], &config.exclude).unwrap_or_default();
+        self.config = config;
+        for path in files {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 self.update(&path, text);
             }
+        }
+        result
+    }
+
+    /// Re-reads the configuration and the files from disk.
+    pub fn reload(&mut self) -> Result<(), OpenError> {
+        match self.root.clone() {
+            Some(root) => self.open(&root),
+            None => Ok(()),
+        }
+    }
+
+    /// Whether `path` belongs to the project, by the rules discovery uses.
+    ///
+    /// A file the editor opens is not necessarily part of the project: "go to
+    /// definition" lands in installed libraries, and a file under an excluded
+    /// directory is excluded whether or not it is open.
+    pub fn accepts(&self, path: &Path) -> bool {
+        match &self.root {
+            Some(root) => self.filter.includes(root, path),
+            None => true,
         }
     }
 
@@ -102,6 +167,11 @@ impl Workspace {
     /// An empty list is how LSP says "this file is clean now". Omitting a file
     /// would leave its last diagnostics on screen forever.
     pub fn diagnostics(&self) -> HashMap<Url, Vec<Diagnostic>> {
+        #[cfg(test)]
+        if self.panic_on_analysis {
+            panic!("analysis panicked, as the test asked");
+        }
+
         let mut sources = SourceMap::new();
         let mut ids: BTreeMap<PathBuf, FileId> = BTreeMap::new();
 
@@ -138,7 +208,11 @@ impl Workspace {
         }
 
         let messages = MessageTable::embedded();
-        for finding in analyse(&sources, &parsed) {
+        let findings = analyse_with(&sources, &parsed, &self.config.settings());
+        for finding in findings
+            .into_iter()
+            .filter(|finding| self.config.is_enabled(finding.check))
+        {
             let file = sources.get(finding.primary.file);
             let Some(url) = to_url(file) else {
                 continue;
@@ -153,38 +227,6 @@ impl Workspace {
     }
 }
 
-fn discover(root: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let hidden = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with('.'));
-            if hidden {
-                continue;
-            }
-            if path.is_dir() {
-                stack.push(path);
-            } else if matches!(
-                path.extension().and_then(|e| e.to_str()),
-                Some("py" | "pyi")
-            ) {
-                found.push(path);
-            }
-        }
-    }
-
-    found.sort();
-    found
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,7 +239,7 @@ mod tests {
             std::fs::write(&path, source).unwrap();
         }
         let mut workspace = Workspace::new(Tone::Dry);
-        workspace.open(dir.path());
+        workspace.open(dir.path()).expect("a valid project");
         (dir, workspace)
     }
 
@@ -372,6 +414,125 @@ mod tests {
     fn an_unknown_file_is_not_inside_anything() {
         let (dir, workspace) = workspace_with(&[("a.py", "x = 1\n")]);
         assert!(!workspace.is_inside_async_function(&dir.path().join("nope.py"), 0));
+    }
+
+    #[test]
+    fn liar_toml_turns_a_check_off() {
+        let (_dir, workspace) = workspace_with(&[
+            (
+                "liar.toml",
+                "ignore = [\"C1\"]
+",
+            ),
+            (
+                "a.py",
+                "async def save():
+    pass
+
+
+async def handle():
+    save()
+",
+            ),
+        ]);
+        assert!(codes(&workspace).is_empty());
+    }
+
+    #[test]
+    fn liar_toml_excludes_files() {
+        let (dir, workspace) = workspace_with(&[
+            (
+                "liar.toml",
+                "exclude = [\"generated/**\"]
+",
+            ),
+            (
+                "a.py", "x = 1
+",
+            ),
+            (
+                "generated/b.py",
+                "y = 2
+",
+            ),
+        ]);
+        assert_eq!(workspace.len(), 1);
+        assert!(!workspace.accepts(&dir.path().join("generated/b.py")));
+        assert!(workspace.accepts(&dir.path().join("a.py")));
+    }
+
+    #[test]
+    fn a_broken_liar_toml_is_reported_and_the_defaults_used() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("liar.toml"),
+            "toen = 1
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("a.py"),
+            "x = 1
+",
+        )
+        .unwrap();
+
+        let mut workspace = Workspace::new(Tone::Dry);
+        let error = workspace.open(dir.path()).expect_err("a broken config");
+        assert!(error.to_string().contains("toen"), "got: {error}");
+        assert_eq!(workspace.len(), 1, "the project is still analysed");
+    }
+
+    #[test]
+    fn editing_liar_toml_applies_on_reload() {
+        let (dir, mut workspace) = workspace_with(&[(
+            "a.py",
+            "async def save():
+    pass
+
+
+async def handle():
+    save()
+",
+        )]);
+        assert_eq!(codes(&workspace), vec!["C1"]);
+
+        std::fs::write(
+            dir.path().join("liar.toml"),
+            "ignore = [\"C1\"]
+",
+        )
+        .unwrap();
+        workspace.reload().unwrap();
+        assert!(codes(&workspace).is_empty());
+    }
+
+    #[test]
+    fn a_virtual_environment_is_not_part_of_the_project() {
+        let (dir, workspace) = workspace_with(&[
+            (
+                "a.py", "x = 1
+",
+            ),
+            ("venv/pyvenv.cfg", ""),
+            (
+                "venv/lib/site.py",
+                "y = 2
+",
+            ),
+        ]);
+        assert_eq!(workspace.len(), 1);
+        assert!(!workspace.accepts(&dir.path().join("venv/lib/site.py")));
+    }
+
+    #[test]
+    fn a_file_outside_the_workspace_is_not_accepted() {
+        let (_dir, workspace) = workspace_with(&[(
+            "a.py", "x = 1
+",
+        )]);
+        let elsewhere = tempfile::tempdir().unwrap();
+        assert!(!workspace.accepts(&elsewhere.path().join("lib.py")));
     }
 
     #[test]

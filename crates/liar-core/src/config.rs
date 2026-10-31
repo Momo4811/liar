@@ -1,7 +1,8 @@
 //! liar.toml.
 
-use liar_core::check::CheckId;
-use liar_core::messages::Tone;
+use crate::analysis::Settings;
+use crate::check::CheckId;
+use crate::messages::Tone;
 use serde::Deserialize;
 use std::path::Path;
 
@@ -107,10 +108,28 @@ impl Config {
         }
     }
 
+    /// Loads `liar.toml` from a project root, or returns defaults if there is
+    /// none. A file that exists but is wrong is an error, not a silent default:
+    /// the user wrote it believing it applies.
+    pub fn for_project(root: &Path) -> Result<Self, ConfigError> {
+        let path = root.join(FILE_NAME);
+        Config::load(path.is_file().then_some(path.as_path()))
+    }
+
     pub fn is_enabled(&self, check: CheckId) -> bool {
         self.enabled.contains(&check)
     }
+
+    /// The part of the configuration the engine itself needs.
+    pub fn settings(&self) -> Settings {
+        Settings {
+            scope_threshold: self.scope_threshold,
+        }
+    }
 }
+
+/// The configuration file's name, looked for at a project's root.
+pub const FILE_NAME: &str = "liar.toml";
 
 #[cfg(test)]
 mod tests {
@@ -201,5 +220,32 @@ mod tests {
             config.exclude,
             vec!["tests/**".to_string(), "build/*".to_string()]
         );
+    }
+
+    #[test]
+    fn a_project_without_a_config_file_gets_the_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(Config::for_project(dir.path()).unwrap(), Config::default());
+    }
+
+    #[test]
+    fn a_project_config_file_is_found_at_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(FILE_NAME), r#"ignore = ["C3e"]"#).unwrap();
+        let config = Config::for_project(dir.path()).unwrap();
+        assert!(!config.is_enabled(CheckId::C3e));
+    }
+
+    #[test]
+    fn a_broken_project_config_file_is_an_error_not_a_default() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(FILE_NAME), "toen = 1").unwrap();
+        assert!(Config::for_project(dir.path()).is_err());
+    }
+
+    #[test]
+    fn the_scope_threshold_reaches_the_engine_settings() {
+        let config = Config::from_toml("scope-threshold = 40").unwrap();
+        assert_eq!(config.settings().scope_threshold, 40);
     }
 }

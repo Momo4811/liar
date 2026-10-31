@@ -781,27 +781,24 @@ dependencies = [
  "annotate-snippets",
  "assert_cmd",
  "clap",
- "globset",
  "insta",
  "liar-core",
  "predicates",
- "serde",
  "tempfile",
- "thiserror",
- "toml",
- "walkdir",
 ]
 
 [[package]]
 name = "liar-core"
 version = "0.0.0"
 dependencies = [
+ "globset",
  "insta",
  "proptest",
  "ruff_python_ast",
  "ruff_python_parser",
  "ruff_text_size",
  "serde",
+ "tempfile",
  "thiserror",
  "toml",
  "walkdir",
@@ -816,6 +813,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror",
  "tokio",
  "tower-lsp",
 ]

@@ -7,6 +7,8 @@ pub mod ast;
 pub mod cfg;
 pub mod check;
 pub mod checks;
+pub mod config;
+pub mod discover;
 pub mod finding;
 pub mod fixture;
 pub mod ids;
