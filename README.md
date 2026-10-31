@@ -14,6 +14,8 @@ Calling an async function without `await` builds a coroutine and throws it away.
 The body never runs, nothing raises, and the endpoint cheerfully returns
 success. It isn't a style opinion — the code does not run.
 
+![liar in VS Code: an un-awaited call is underlined, Add await fixes it, and the finding clears on save](docs/media/add-await.gif)
+
 ---
 
 ## It finds real bugs
@@ -158,6 +160,8 @@ liar check src/ --tone brutal
 Dry is the default. `professional` exists so the tool is usable at work, which
 is both a genuine kindness and, in itself, the joke.
 
+![the brutal tone in VS Code: "the docstring for 'archive' is fiction."](docs/media/brutal-docstring.gif)
+
 ## In your editor
 
 A language server ships alongside the CLI, and a VS Code extension launches it.
@@ -175,18 +179,39 @@ would produce a syntax error, which is a worse outcome than the bug it was
 meant to fix.
 
 ```bash
-cargo build --release -p liar-lsp      # put liar-lsp on PATH
-cd editors/vscode && npm install && npx tsc -p ./
+cargo install --git https://github.com/Momo4811/liar liar-lsp   # puts liar-lsp on PATH
+cd editors/vscode && npm install && npm run package             # builds liar-0.1.0.vsix
+code --install-extension liar-0.1.0.vsix
 ```
 
-Settings are `liar.enable`, `liar.tone` and `liar.path`. The extension is 125
-lines of TypeScript and holds no analysis logic whatsoever — the server decides
-what a finding is, so the editor and the command line can never disagree.
+Settings are `liar.enable`, `liar.tone` and `liar.path`. The extension is about
+140 lines of TypeScript and holds no analysis logic whatsoever — the server
+decides what a finding is, so the editor and the command line can never
+disagree. They also read the same `liar.toml` and choose files by the same code:
+a project's `ignore` and `exclude` apply in both, and virtual environments are
+skipped by both, recognised by their `pyvenv.cfg` rather than their name.
+
+The extension is tested the way a user meets it. CI builds the `.vsix`, unpacks
+exactly what it contains, and runs it inside a real VS Code against the real
+server: it activates, findings appear, `Add await` is offered in `async def`
+and not in `def`, changing the tone rewords them, and applying the fix and
+saving clears the finding. The first package built had left out its own
+dependencies and could not load; testing the development folder would have
+passed anyway, which is why the test does not.
 
 ## Running it
 
 ```bash
 cargo run --release -p liar-cli -- check path/to/project
+```
+
+Configuration is read from `liar.toml` in the current directory, or from
+`--config path/to/liar.toml`:
+
+```toml
+ignore = ["C3e"]            # turn a check off
+exclude = ["generated/**"]  # skip files
+scope-threshold = 60        # C3e: lines of scope before a name must say something
 ```
 
 Exit codes follow the usual linter convention: `0` clean, `1` findings, `2` the
@@ -235,7 +260,7 @@ Everything is arena-allocated and referenced by typed integer index — the way
 ## Tests
 
 ```bash
-cargo test        # 371 tests
+cargo test        # 389 tests
 ```
 
 Fixtures declare their expectations inline, and **an unexpected finding fails as
@@ -260,20 +285,14 @@ All eight checks work, along with the engine they sit on: the index, type
 inference, control flow graphs with exception edges, a dataflow solver, the
 corpus tooling, the CLI, the language server and the VS Code extension.
 
-Not here yet: a screen recording of the extension in use. The protocol layer is
-verified end to end in CI, but nobody has watched it work, and that GIF is
-probably the single highest-value thing left.
+Not yet done: the extension is not on the Marketplace. Until it is, install it
+from the `.vsix` as above, or download one from any CI run.
 
 **C3e is the weakest thing here and it is worth saying so.** It has no
 correctness content: it is a style opinion about uninformative names, and a
 defensible one, but a team that disagrees should turn it off with
 `ignore = ["C3e"]`. Everything else in the tool is about code that does not do
 what it says.
-
-Not yet done: the extension has been driven through a real LSP handshake by
-`scripts/lsp-smoke.py`, which runs in CI, but it has not been exercised by hand
-inside VS Code and there is no screen recording here yet. The panic guard in
-the server is implemented and not directly tested.
 
 Design notes and the reasoning behind each decision are in
 [`docs/`](docs/) — including why the parser was chosen, what was given up for
